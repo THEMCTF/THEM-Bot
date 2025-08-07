@@ -1,5 +1,13 @@
+import os
+
 import disnake
+import json5
 from disnake.ext import commands
+
+# Load RESTRICTED from a JSON file
+with open("/Users/starry/Desktop/Code/THEMc/bot/config.json5", "r") as f:
+    data = json5.load(f)
+    RESTRICTED = data.get("RESTRICTED", [])
 
 
 class MessageResponder(commands.Cog):
@@ -8,8 +16,8 @@ class MessageResponder(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message: disnake.Message):
-        # Ignore messages from bots unless explicitly handling them.
-        if message.author.bot:
+        # Ignore messages from bots or messages in restricted channels
+        if message.author.bot or message.channel.id in RESTRICTED:
             return
 
         # Check for a specific message.

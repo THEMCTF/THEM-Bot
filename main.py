@@ -1,8 +1,8 @@
 import asyncio
-import json
 import os
 
 import disnake
+import json5
 from disnake.ext import commands
 from dotenv import load_dotenv
 
