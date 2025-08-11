@@ -1,5 +1,7 @@
 # import json
 
+import time
+
 import disnake
 from disnake.ext import commands
 
@@ -13,6 +15,35 @@ class GeneralCog(commands.Cog):
     async def test(self, inter: disnake.ApplicationCommandInteraction):
         await inter.response.send_message("YOOOO")
         print(f"\033[34m{inter.author.display_name} just ran /test\033[0m")
+
+    @commands.slash_command(name="gif", description="gif.")
+    async def gif(self, inter: disnake.ApplicationCommandInteraction):
+        await inter.response.send_message(
+            "https://cdn.discordapp.com/attachments/1382763557816500227/1400565040100409405/5NHcc2CSekZ0u3Cb8cVYKCbvDwGz3O372m9bteYZvljpiaUeyaodrWuuML0UK7iDMWilkUkQJR2Pl1xEaOC86BvHHf2RjbJfjWqOStrVYQnxzXEOkT6QzV9nFE7zTuh1TmUh3B74WN9naNsF4wU2tgLHJQ2DtlCcjCwoWrfdZuVMoUiRMp6ZqlWTK3TeHLUDeWlnXi6CuCmHK67geXDD0zh9B5iOiFWxl5fX6OQBPmLdhRpMpItCjnDuxCeCSlItsk9ZU9RALGfmLPFSTBDcE79OTrKanVNJZFHfF74QFrTq839ZYAeNGoEzBInEaC9dgtrlZ2bF640olzMbOx1XB6G9xmyp0ibkSarknXVGiEVPtgDatFrGbo14uZ1x5lZMXlqheNjbq1Bof3JsaL6PD1MpPsVhir6Cjuns4pJl8yWdBHdWKC1xtzLZSH3nKQXAxzNmy8ZFEKBvE2KowiTjgFid0tngNkt0zho1OZ9NJgk7eA8r7VjFQXiB9D1X..gif"
+        )
+        print(f"\033[34m{inter.author.display_name} just ran /gif\033[0m")
+
+    @commands.slash_command(name="spam", description="THEM?! ON TOP")
+    async def spam(
+        self,
+        inter: disnake.ApplicationCommandInteraction,
+    ):
+        await inter.response.defer(with_message="started")
+        for _ in range(3):
+            await inter.channel.send(
+                "https://cdn.discordapp.com/attachments/1382763557816500227/1400565040100409405/5NHcc2CSekZ0u3Cb8cVYKCbvDwGz3O372m9bteYZvljpiaUeyaodrWuuML0UK7iDMWilkUkQJR2Pl1xEaOC86BvHHf2RjbJfjWqOStrVYQnxzXEOkT6QzV9nFE7zTuh1TmUh3B74WN9naNsF4wU2tgLHJQ2DtlCcjCwoWrfdZuVMoUiRMp6ZqlWTK3TeHLUDeWlnXi6CuCmHK67geXDD0zh9B5iOiFWxl5fX6OQBPmLdhRpMpItCjnDuxCeCSlItsk9ZU9RALGfmLPFSTBDcE79OTrKanVNJZFHfF74QFrTq839ZYAeNGoEzBInEaC9dgtrlZ2bF640olzMbOx1XB6G9xmyp0ibkSarknXVGiEVPtgDatFrGbo14uZ1x5lZMXlqheNjbq1Bof3JsaL6PD1MpPsVhir6Cjuns4pJl8yWdBHdWKC1xtzLZSH3nKQXAxzNmy8ZFEKBvE2KowiTjgFid0tngNkt0zho1OZ9NJgk7eA8r7VjFQXiB9D1X..gif"
+            )
+            time.sleep(1)
+        await inter.followup.send("done")
+        print(f"\033[34m{inter.author.display_name} just ran /spam\033[0m")
+
+    @commands.slash_command(
+        name="report", description="For when you don't want to ping in the channel"
+    )
+    async def report(self, inter: disnake.ApplicationCommandInteraction, message):
+        await inter.response.send_message(
+            "not added ping starry if you really want it", ephemeral=True
+        )
 
     @commands.slash_command(name="help", description="List all slash commands.")
     async def help_slash(self, inter: disnake.ApplicationCommandInteraction):
