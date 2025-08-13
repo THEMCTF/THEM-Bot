@@ -107,7 +107,8 @@ jobs:
                           "name": os.getenv("AUTHOR", ""),
                           "icon_url": os.getenv("AUTHOR_ICON", "")
                       },
-                      "title": f"[{commit_url}]({title})",
+                      "title": title,
+                      "url": commit_url,
                       "description": description,
                       "color": 8022983
                   }
