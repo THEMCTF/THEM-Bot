@@ -72,6 +72,7 @@ jobs:
         run: |
           python3 - <<'PY' > payload.json
           import json, os
+          import re
 
           commit_count = int(os.getenv("COMMIT_COUNT", "0"))
           commit_label = f"{commit_count} new commit" + ("" if commit_count == 1 else "s")
@@ -80,11 +81,22 @@ jobs:
           commits_text = os.getenv("COMMITS_TEXT", "No commits found.")
           commit_url = os.getenv("BUTTON_URL", "")
 
-          # Make commit hash clickable in Markdown
-          if commit_url:
-              description = f"[{commits_text}]({commit_url})"
-          else:
-              description = commits_text
+          # Function to hyperlink commit hashes
+          def hyperlink_hashes(text, url):
+              # Match 7+ character hex hash at start of line
+              lines = text.splitlines()
+              new_lines = []
+              for line in lines:
+                  match = re.match(r'^([0-9a-f]{7,40})( .*)?$', line)
+                  if match and url:
+                      hash_part = match.group(1)
+                      rest = match.group(2) or ""
+                      new_lines.append(f"[{hash_part}]({url}) | {rest}")
+                  else:
+                      new_lines.append(line)
+              return "\n".join(new_lines)
+
+          description = hyperlink_hashes(commits_text, commit_url)
 
           title = f"[{repo_name}:{branch}] {commit_label}"
 
@@ -104,6 +116,7 @@ jobs:
 
           print(json.dumps(payload))
           PY
+
 
 
       - name: Send to Discord webhook
