@@ -93,7 +93,7 @@ jobs:
                   if match and url:
                       hash_part = match.group(1)
                       rest = match.group(2) or ""
-                      new_lines.append(f"[{hash_part}]({url}) | {rest}")
+                      new_lines.append(f"[{hash_part}]({url}) **|** {rest}")
                   else:
                       new_lines.append(line)
               return "\n".join(new_lines)
