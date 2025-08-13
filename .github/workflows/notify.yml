@@ -98,9 +98,11 @@ jobs:
           echo "AUTHOR=$AUTHOR" >> $GITHUB_ENV
           echo "AUTHOR_ICON=$AUTHOR_ICON" >> $GITHUB_ENV
           echo "TYPE=$TYPE" >> $GITHUB_ENV
-          echo "BODY<<'EOF'" >> $GITHUB_ENV
-          printf "%s\n" "$BODY" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
+          (
+            echo "BODY<<EOF"
+            echo "$BODY"
+            echo "EOF"
+          ) >> $GITHUB_ENV
           echo "BUTTON_URL=$BUTTON_URL" >> $GITHUB_ENV
 
 
