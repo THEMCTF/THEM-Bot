@@ -75,8 +75,18 @@ jobs:
 
           commit_count = int(os.getenv("COMMIT_COUNT", "0"))
           commit_label = f"{commit_count} new commit" + ("" if commit_count == 1 else "s")
-          title = f"[{os.getenv('REPO_NAME')}:{os.getenv('BRANCH')}] {commit_label}"
-          description = os.getenv("COMMITS_TEXT", "No commits found.")
+          repo_name = os.getenv("REPO_NAME", "")
+          branch = os.getenv("BRANCH", "")
+          commits_text = os.getenv("COMMITS_TEXT", "No commits found.")
+          commit_url = os.getenv("BUTTON_URL", "")
+
+          # Make commit hash clickable in Markdown
+          if commit_url:
+              description = f"[{commits_text}]({commit_url})"
+          else:
+              description = commits_text
+
+          title = f"[{repo_name}:{branch}] {commit_label}"
 
           payload = {
               "embeds": [
@@ -87,27 +97,14 @@ jobs:
                       },
                       "title": title,
                       "description": description,
-                      "url": os.getenv("BUTTON_URL", ""),
                       "color": 8022983
-                  }
-              ],
-              "components": [
-                  {
-                      "type": 1,
-                      "components": [
-                          {
-                              "type": 2,
-                              "style": 5,
-                              "url": os.getenv("BUTTON_URL", ""),
-                              "label": "View Commit",
-                              "disabled": False
-                          }
-                      ]
                   }
               ]
           }
+
           print(json.dumps(payload))
           PY
+
 
       - name: Send to Discord webhook
         if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
