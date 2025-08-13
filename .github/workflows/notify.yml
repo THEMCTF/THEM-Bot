@@ -1,0 +1,166 @@
+name: Notify Discord on change
+
+on:
+  - push
+  - create
+  - delete
+  - fork
+  - issue_comment
+  - issues
+  - label
+  - pull_request
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (for jq availability in runner)
+        uses: actions/checkout@v4
+
+      - name: Prepare variables
+        shell: bash
+        run: |
+          set -euo pipefail
+          EVENT_JSON="$GITHUB_EVENT_PATH"
+
+          # commit shas / PR info (jq returns empty string if missing)
+          COMMIT_SHA="$(jq -r '.head_commit.id // .head_commit.sha // .after // .pull_request.head.sha // .check_suite.head_sha // ""' "$EVENT_JSON")"
+          PR_HTML_URL="$(jq -r '.pull_request.html_url // ""' "$EVENT_JSON")"
+          COMMIT_MESSAGE="$(jq -r '.head_commit.message // ""' "$EVENT_JSON")"
+          COMMIT_AUTHOR_NAME="$(jq -r '.head_commit.author.name // ""' "$EVENT_JSON")"
+          COMMIT_AUTHOR_USERNAME="$(jq -r '.head_commit.author.username // ""' "$EVENT_JSON")"
+
+          # workflow_dispatch inputs (safe: jq returns empty string for other events)
+          INPUT_BUTTON_URL="$(jq -r '.inputs.button_url // ""' "$EVENT_JSON")"
+          INPUT_AUTHOR="$(jq -r '.inputs.author // ""' "$EVENT_JSON")"
+          INPUT_AUTHOR_ICON="$(jq -r '.inputs.author_icon // ""' "$EVENT_JSON")"
+          INPUT_TYPE="$(jq -r '.inputs.type // ""' "$EVENT_JSON")"
+          INPUT_BODY="$(jq -r '.inputs.body // ""' "$EVENT_JSON")"
+
+          # author selection
+          if [ -n "$INPUT_AUTHOR" ]; then
+            AUTHOR="$INPUT_AUTHOR"
+          elif [ -n "$COMMIT_AUTHOR_NAME" ]; then
+            AUTHOR="$COMMIT_AUTHOR_NAME"
+          else
+            AUTHOR="${{ github.actor }}"
+          fi
+
+          # username / icon
+          if [ -n "$COMMIT_AUTHOR_USERNAME" ]; then
+            AUTHOR_USERNAME="$COMMIT_AUTHOR_USERNAME"
+          else
+            AUTHOR_USERNAME="${{ github.actor }}"
+          fi
+          if [ -n "$INPUT_AUTHOR_ICON" ]; then
+            AUTHOR_ICON="$INPUT_AUTHOR_ICON"
+          else
+            AUTHOR_ICON="https://github.com/$AUTHOR_USERNAME.png"
+          fi
+
+          # title/type
+          if [ -n "$INPUT_TYPE" ]; then
+            TYPE="$INPUT_TYPE"
+          else
+            REF_NAME="${{ github.ref_name }}"
+            if [ -n "$REF_NAME" ]; then
+              TYPE="Change on $REF_NAME"
+            else
+              TYPE="Repository event"
+            fi
+          fi
+
+          # body (input > commit message > generic)
+          if [ -n "$INPUT_BODY" ]; then
+            BODY="$INPUT_BODY"
+          elif [ -n "$COMMIT_MESSAGE" ]; then
+            BODY="$COMMIT_MESSAGE"
+          else
+            BODY="No commit message available for this event."
+          fi
+
+          # BUTTON_URL priority:
+          # 1: explicit workflow input
+          # 2: commit URL if we have a SHA
+          # 3: PR URL if this was a PR event
+          # 4: repo URL
+          if [ -n "$INPUT_BUTTON_URL" ]; then
+            BUTTON_URL="$INPUT_BUTTON_URL"
+          elif [ -n "$COMMIT_SHA" ]; then
+            BUTTON_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/$COMMIT_SHA"
+          elif [ -n "$PR_HTML_URL" ]; then
+            BUTTON_URL="$PR_HTML_URL"
+          else
+            BUTTON_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
+          fi
+
+          # export to GITHUB_ENV (safe multiline BODY)
+          echo "AUTHOR=$AUTHOR" >> $GITHUB_ENV
+          echo "AUTHOR_ICON=$AUTHOR_ICON" >> $GITHUB_ENV
+          echo "TYPE=$TYPE" >> $GITHUB_ENV
+          echo "BODY<<'EOF'" >> $GITHUB_ENV
+          printf "%s\n" "$BODY" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+          echo "BUTTON_URL=$BUTTON_URL" >> $GITHUB_ENV
+
+
+      - name: Build payload safely (Python one-liner)
+        run: |
+          python3 - <<'PY' > payload.json
+          import json, os
+          payload = {
+            "embeds": [
+              {
+                "author": {"name": os.getenv("AUTHOR",""), "icon_url": os.getenv("AUTHOR_ICON","")},
+                "title": os.getenv("TYPE",""),
+                "description": os.getenv("BODY",""),
+                "color": 8022983,
+                "fields": []
+              }
+            ],
+            "flags": 4096,
+            "components": [
+              {
+                "type": 1,
+                "components": [
+                  {
+                    "type": 2,
+                    "style": 5,
+                    "url": os.getenv("BUTTON_URL",""),
+                    "label": "Commit",
+                    "disabled": False
+                  }
+                ]
+              }
+            ]
+          }
+          print(json.dumps(payload))
+          PY
+
+      - name: Send to Discord webhook
+        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          if [ -z "${WEBHOOK:-}" ]; then
+            echo "Missing DISCORD_WEBHOOK_URL secret" >&2
+            exit 1
+          fi
+          if [ -z "${WEBHOOK:-}" ]; then
+            echo "Missing DISCORD_WEBHOOK_URL secret" >&2
+            exit 1
+          fi
+
+          set -o pipefail
+          # send payload.json; capture response body and status
+          http_status=$(curl -sS -X POST -H "Content-Type: application/json" --data-binary @payload.json "$WEBHOOK" -w "%{http_code}" -o /tmp/discord_resp.txt) || true
+          echo "Discord response (body):"
+          if [ -s /tmp/discord_resp.txt ]; then
+            cat /tmp/discord_resp.txt || true
+          else
+            echo "(no body)"
+          fi
+          echo "HTTP status: $http_status"
+          if [ "$http_status" -ge 400 ]; then
+            exit 1
+          fi
