@@ -23,118 +23,88 @@ jobs:
           set -euo pipefail
           EVENT_JSON="$GITHUB_EVENT_PATH"
 
-          # commit shas / PR info (jq returns empty string if missing)
-          COMMIT_SHA="$(jq -r '.head_commit.id // .head_commit.sha // .after // .pull_request.head.sha // .check_suite.head_sha // ""' "$EVENT_JSON")"
-          PR_HTML_URL="$(jq -r '.pull_request.html_url // ""' "$EVENT_JSON")"
-          COMMIT_MESSAGE="$(jq -r '.head_commit.message // ""' "$EVENT_JSON")"
+          REPO_NAME="${GITHUB_REPOSITORY##*/}"
+          BRANCH="${GITHUB_REF_NAME:-${{ github.ref_name }}}"
+
+          # Get commits array length (0 if not push)
+          COMMIT_COUNT=$(jq '.commits | length' "$EVENT_JSON")
+          
+          # Build commit list (hash + message)
+          if [ "$COMMIT_COUNT" -gt 0 ]; then
+            COMMITS_TEXT=$(jq -r '.commits[] | "\(.id[0:7]) \(.message)"' "$EVENT_JSON" | sed 's/"/\\"/g')
+            LATEST_SHA=$(jq -r '.commits[-1].id' "$EVENT_JSON")
+          else
+            COMMITS_TEXT="No commits found for this event."
+            LATEST_SHA=$(jq -r '.head_commit.id // .after // ""' "$EVENT_JSON")
+          fi
+
+          # Determine button URL (link to latest commit or repo)
+          if [ -n "$LATEST_SHA" ] && [ "$LATEST_SHA" != "null" ]; then
+            BUTTON_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/$LATEST_SHA"
+          else
+            BUTTON_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
+          fi
+
+          # Author info (prefer commit author if available)
           COMMIT_AUTHOR_NAME="$(jq -r '.head_commit.author.name // ""' "$EVENT_JSON")"
           COMMIT_AUTHOR_USERNAME="$(jq -r '.head_commit.author.username // ""' "$EVENT_JSON")"
-
-          # workflow_dispatch inputs (safe: jq returns empty string for other events)
-          INPUT_BUTTON_URL="$(jq -r '.inputs.button_url // ""' "$EVENT_JSON")"
-          INPUT_AUTHOR="$(jq -r '.inputs.author // ""' "$EVENT_JSON")"
-          INPUT_AUTHOR_ICON="$(jq -r '.inputs.author_icon // ""' "$EVENT_JSON")"
-          INPUT_TYPE="$(jq -r '.inputs.type // ""' "$EVENT_JSON")"
-          INPUT_BODY="$(jq -r '.inputs.body // ""' "$EVENT_JSON")"
-
-          # author selection
-          if [ -n "$INPUT_AUTHOR" ]; then
-            AUTHOR="$INPUT_AUTHOR"
-          elif [ -n "$COMMIT_AUTHOR_NAME" ]; then
+          if [ -n "$COMMIT_AUTHOR_NAME" ]; then
             AUTHOR="$COMMIT_AUTHOR_NAME"
           else
             AUTHOR="${{ github.actor }}"
           fi
-
-          # username / icon
           if [ -n "$COMMIT_AUTHOR_USERNAME" ]; then
             AUTHOR_USERNAME="$COMMIT_AUTHOR_USERNAME"
           else
             AUTHOR_USERNAME="${{ github.actor }}"
           fi
-          if [ -n "$INPUT_AUTHOR_ICON" ]; then
-            AUTHOR_ICON="$INPUT_AUTHOR_ICON"
-          else
-            AUTHOR_ICON="https://github.com/$AUTHOR_USERNAME.png"
-          fi
+          AUTHOR_ICON="https://github.com/$AUTHOR_USERNAME.png"
 
-          # title/type
-          if [ -n "$INPUT_TYPE" ]; then
-            TYPE="$INPUT_TYPE"
-          else
-            REF_NAME="${{ github.ref_name }}"
-            if [ -n "$REF_NAME" ]; then
-              TYPE="Change on $REF_NAME"
-            else
-              TYPE="Repository event"
-            fi
-          fi
-
-          # body (input > commit message > generic)
-          if [ -n "$INPUT_BODY" ]; then
-            BODY="$INPUT_BODY"
-          elif [ -n "$COMMIT_MESSAGE" ]; then
-            BODY="$COMMIT_MESSAGE"
-          else
-            BODY="No commit message available for this event."
-          fi
-
-          # BUTTON_URL priority:
-          # 1: explicit workflow input
-          # 2: commit URL if we have a SHA
-          # 3: PR URL if this was a PR event
-          # 4: repo URL
-          if [ -n "$INPUT_BUTTON_URL" ]; then
-            BUTTON_URL="$INPUT_BUTTON_URL"
-          elif [ -n "$COMMIT_SHA" ]; then
-            BUTTON_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/$COMMIT_SHA"
-          elif [ -n "$PR_HTML_URL" ]; then
-            BUTTON_URL="$PR_HTML_URL"
-          else
-            BUTTON_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
-          fi
-
-          # export to GITHUB_ENV (safe multiline BODY)
+          echo "REPO_NAME=$REPO_NAME" >> $GITHUB_ENV
+          echo "BRANCH=$BRANCH" >> $GITHUB_ENV
+          echo "COMMIT_COUNT=$COMMIT_COUNT" >> $GITHUB_ENV
+          echo "COMMITS_TEXT=$COMMITS_TEXT" >> $GITHUB_ENV
+          echo "BUTTON_URL=$BUTTON_URL" >> $GITHUB_ENV
           echo "AUTHOR=$AUTHOR" >> $GITHUB_ENV
           echo "AUTHOR_ICON=$AUTHOR_ICON" >> $GITHUB_ENV
-          echo "TYPE=$TYPE" >> $GITHUB_ENV
-          (
-            echo "BODY<<EOF"
-            echo "$BODY"
-            echo "EOF"
-          ) >> $GITHUB_ENV
-          echo "BUTTON_URL=$BUTTON_URL" >> $GITHUB_ENV
 
-
-      - name: Build payload safely (Python one-liner)
+      - name: Build payload with all commits
         run: |
           python3 - <<'PY' > payload.json
           import json, os
+
+          commit_count = int(os.getenv("COMMIT_COUNT", "0"))
+          commit_label = f"{commit_count} new commit" + ("" if commit_count == 1 else "s")
+          title = f"[{os.getenv('REPO_NAME')}:{os.getenv('BRANCH')}] {commit_label}"
+          description = os.getenv("COMMITS_TEXT", "No commits found.")
+
           payload = {
-            "embeds": [
-              {
-                "author": {"name": os.getenv("AUTHOR",""), "icon_url": os.getenv("AUTHOR_ICON","")},
-                "title": os.getenv("TYPE",""),
-                "description": os.getenv("BODY",""),
-                "color": 8022983,
-                "fields": []
-              }
-            ],
-            "flags": 4096,
-            "components": [
-              {
-                "type": 1,
-                "components": [
+              "embeds": [
                   {
-                    "type": 2,
-                    "style": 5,
-                    "url": os.getenv("BUTTON_URL",""),
-                    "label": "Commit",
-                    "disabled": False
+                      "author": {
+                          "name": os.getenv("AUTHOR", ""),
+                          "icon_url": os.getenv("AUTHOR_ICON", "")
+                      },
+                      "title": title,
+                      "description": description,
+                      "url": os.getenv("BUTTON_URL", ""),
+                      "color": 8022983
                   }
-                ]
-              }
-            ]
+              ],
+              "components": [
+                  {
+                      "type": 1,
+                      "components": [
+                          {
+                              "type": 2,
+                              "style": 5,
+                              "url": os.getenv("BUTTON_URL", ""),
+                              "label": "View Commit",
+                              "disabled": False
+                          }
+                      ]
+                  }
+              ]
           }
           print(json.dumps(payload))
           PY
@@ -148,14 +118,10 @@ jobs:
             echo "Missing DISCORD_WEBHOOK_URL secret" >&2
             exit 1
           fi
-          if [ -z "${WEBHOOK:-}" ]; then
-            echo "Missing DISCORD_WEBHOOK_URL secret" >&2
-            exit 1
-          fi
-
-          set -o pipefail
-          # send payload.json; capture response body and status
-          http_status=$(curl -sS -X POST -H "Content-Type: application/json" --data-binary @payload.json "$WEBHOOK" -w "%{http_code}" -o /tmp/discord_resp.txt) || true
+          http_status=$(curl -sS -X POST \
+            -H "Content-Type: application/json" \
+            --data-binary @payload.json \
+            "$WEBHOOK" -w "%{http_code}" -o /tmp/discord_resp.txt) || true
           echo "Discord response (body):"
           if [ -s /tmp/discord_resp.txt ]; then
             cat /tmp/discord_resp.txt || true

@@ -22,7 +22,6 @@ bot = commands.InteractionBot(test_guilds=[GUILD_ID], intents=disnake.Intents.al
 # Load cogs (ensure these .py files exist in your bot's folder).
 bot.load_extension("Cogs.General")  # General commands
 bot.load_extension("Cogs.Responder")  # Responder duh
-# bot.load_extension("Cogs.LoggerCog")
 bot.load_extension("Cogs.Moderation")
 bot.load_extension("Cogs.Starry")
 
