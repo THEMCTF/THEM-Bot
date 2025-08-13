@@ -123,7 +123,7 @@ jobs:
       - name: Send to Discord webhook
         if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
         env:
-          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }} # no error here btw
         run: |
           if [ -z "${WEBHOOK:-}" ]; then
             echo "Missing DISCORD_WEBHOOK_URL secret" >&2
