@@ -63,7 +63,9 @@ jobs:
           echo "REPO_NAME=$REPO_NAME" >> $GITHUB_ENV
           echo "BRANCH=$BRANCH" >> $GITHUB_ENV
           echo "COMMIT_COUNT=$COMMIT_COUNT" >> $GITHUB_ENV
-          echo "COMMITS_TEXT=$COMMITS_TEXT" >> $GITHUB_ENV
+          echo "COMMITS_TEXT<<EOF" >> $GITHUB_ENV
+          echo "$COMMITS_TEXT" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
           echo "BUTTON_URL=$BUTTON_URL" >> $GITHUB_ENV
           echo "AUTHOR=$AUTHOR" >> $GITHUB_ENV
           echo "AUTHOR_ICON=$AUTHOR_ICON" >> $GITHUB_ENV
