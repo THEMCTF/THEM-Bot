@@ -30,8 +30,5 @@ class LoggerCog(commands.Cog):
             )
 
 
-# print(Panel(Text("Bot stopped!", justify="center"), border_style="red"))
-
-
 def setup(bot):
     bot.add_cog(LoggerCog(bot))
