@@ -77,6 +77,35 @@ class Starry(commands.Cog):
         except Exception as e:
             await inter.followup.send(f"Error pinning thread: {e}")
 
+    @commands.install_types(user=True)
+    @commands.slash_command(
+        name="testing", description="this command is subject to change"
+    )
+    async def testing(self):
+        bot = self.bot
+        # List all servers the bot is in
+        if 1 == 2:
+            for guild in bot.guilds:
+                print(f"\nServer: {guild.name} (ID: {guild.id})")
+
+                # Try to fetch existing invites
+                try:
+                    invites = await guild.invites()
+                    if invites:
+                        for invite in invites:
+                            print(f"Invite: {invite.url}")
+                    else:
+                        # Create a temporary invite if none exist
+                        if guild.me.guild_permissions.create_instant_invite:
+                            invite = await guild.text_channels[0].create_invite(
+                                max_age=3600, max_uses=1
+                            )
+                            print(f"Generated invite: {invite.url}")
+                        else:
+                            print("No invites found and cannot create one.")
+                except disnake.Forbidden:
+                    print("Bot does not have permission to view invites.")
+
 
 def setup(bot):
     bot.add_cog(Starry(bot))

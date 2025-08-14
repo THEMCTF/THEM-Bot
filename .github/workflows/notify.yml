@@ -14,7 +14,7 @@ jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout (for jq availability in runner)
+      - name: Checkout (for jq availability)
         uses: actions/checkout@v4
 
       - name: Prepare variables
@@ -24,12 +24,10 @@ jobs:
           EVENT_JSON="$GITHUB_EVENT_PATH"
 
           REPO_NAME="${GITHUB_REPOSITORY##*/}"
-          BRANCH="${GITHUB_REF_NAME:-${{ github.ref_name }}}"
+          BRANCH="${GITHUB_REF##refs/heads/}"  # Use GITHUB_REF to extract branch
 
-          # Get commits array length (0 if not push)
           COMMIT_COUNT=$(jq '.commits | length' "$EVENT_JSON")
-          
-          # Build commit list (hash + message)
+
           if [ "$COMMIT_COUNT" -gt 0 ]; then
             COMMITS_TEXT=$(jq -r '.commits[] | "\(.id[0:7]) \(.message)"' "$EVENT_JSON" | sed 's/"/\\"/g')
             LATEST_SHA=$(jq -r '.commits[-1].id' "$EVENT_JSON")
@@ -38,26 +36,27 @@ jobs:
             LATEST_SHA=$(jq -r '.head_commit.id // .after // ""' "$EVENT_JSON")
           fi
 
-          # Determine button URL (link to latest commit or repo)
           if [ -n "$LATEST_SHA" ] && [ "$LATEST_SHA" != "null" ]; then
             BUTTON_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/$LATEST_SHA"
           else
             BUTTON_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
           fi
 
-          # Author info (prefer commit author if available)
           COMMIT_AUTHOR_NAME="$(jq -r '.head_commit.author.name // ""' "$EVENT_JSON")"
           COMMIT_AUTHOR_USERNAME="$(jq -r '.head_commit.author.username // ""' "$EVENT_JSON")"
+
           if [ -n "$COMMIT_AUTHOR_NAME" ]; then
             AUTHOR="$COMMIT_AUTHOR_NAME"
           else
-            AUTHOR="${{ github.actor }}"
+            AUTHOR="${GITHUB_ACTOR}"
           fi
+
           if [ -n "$COMMIT_AUTHOR_USERNAME" ]; then
             AUTHOR_USERNAME="$COMMIT_AUTHOR_USERNAME"
           else
-            AUTHOR_USERNAME="${{ github.actor }}"
+            AUTHOR_USERNAME="${GITHUB_ACTOR}"
           fi
+
           AUTHOR_ICON="https://github.com/$AUTHOR_USERNAME.png"
 
           echo "REPO_NAME=$REPO_NAME" >> $GITHUB_ENV
@@ -73,8 +72,7 @@ jobs:
       - name: Build payload with all commits
         run: |
           python3 - <<'PY' > payload.json
-          import json, os
-          import re
+          import json, os, re
 
           commit_count = int(os.getenv("COMMIT_COUNT", "0"))
           commit_label = f"{commit_count} new commit" + ("" if commit_count == 1 else "s")
@@ -83,9 +81,7 @@ jobs:
           commits_text = os.getenv("COMMITS_TEXT", "No commits found.")
           commit_url = os.getenv("BUTTON_URL", "")
 
-          # Function to hyperlink commit hashes
           def hyperlink_hashes(text, url):
-              # Match 7+ character hex hash at start of line
               lines = text.splitlines()
               new_lines = []
               for line in lines:
@@ -99,7 +95,6 @@ jobs:
               return "\n".join(new_lines)
 
           description = hyperlink_hashes(commits_text, commit_url)
-
           title = f"[{repo_name}:{branch}] {commit_label}"
 
           payload = {
@@ -120,28 +115,28 @@ jobs:
           print(json.dumps(payload))
           PY
 
-
-
       - name: Send to Discord webhook
         if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
         env:
-          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }} # no error here btw
+          WEBHOOKS: "${{ secrets.DISCORD_WEBHOOK_URL }},${{ secrets.DISCORD_WEBHOOK_URL2 }}"
         run: |
-          if [ -z "${WEBHOOK:-}" ]; then
-            echo "Missing DISCORD_WEBHOOK_URL secret" >&2
-            exit 1
-          fi
-          http_status=$(curl -sS -X POST \
-            -H "Content-Type: application/json" \
-            --data-binary @payload.json \
-            "$WEBHOOK" -w "%{http_code}" -o /tmp/discord_resp.txt) || true
-          echo "Discord response (body):"
-          if [ -s /tmp/discord_resp.txt ]; then
-            cat /tmp/discord_resp.txt || true
-          else
-            echo "(no body)"
-          fi
-          echo "HTTP status: $http_status"
-          if [ "$http_status" -ge 400 ]; then
-            exit 1
-          fi
+          for WEBHOOK in $(echo "$WEBHOOKS" | jq -r '.[]'); do
+            if [ -z "$WEBHOOK" ]; then
+              echo "Missing webhook URL, skipping..."
+              continue
+            fi
+            http_status=$(curl -sS -X POST \
+              -H "Content-Type: application/json" \
+              --data-binary @payload.json \
+              "$WEBHOOK" -w "%{http_code}" -o /tmp/discord_resp.txt) || true
+            echo "Discord response (body):"
+            if [ -s /tmp/discord_resp.txt ]; then
+              cat /tmp/discord_resp.txt || true
+            else
+              echo "(no body)"
+            fi
+            echo "HTTP status: $http_status"
+            if [ "$http_status" -ge 400 ]; then
+              exit 1
+            fi
+          done
