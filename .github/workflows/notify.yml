@@ -118,25 +118,36 @@ jobs:
       - name: Send to Discord webhook
         if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
         env:
-          WEBHOOKS: "${{ secrets.DISCORD_WEBHOOK_URL }},${{ secrets.DISCORD_WEBHOOK_URL2 }}"
+          WEBHOOK1: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          WEBHOOK2: ${{ secrets.DISCORD_WEBHOOK_URL2 }}
         run: |
-          for WEBHOOK in $(echo "$WEBHOOKS" | jq -r '.[]'); do
+          set -euo pipefail
+
+          # iterate over each webhook env var (works even if one is empty)
+          for WEBHOOK in "$WEBHOOK1" "$WEBHOOK2"; do
             if [ -z "$WEBHOOK" ]; then
               echo "Missing webhook URL, skipping..."
               continue
             fi
+
+            tmpfile=$(mktemp)
             http_status=$(curl -sS -X POST \
               -H "Content-Type: application/json" \
               --data-binary @payload.json \
-              "$WEBHOOK" -w "%{http_code}" -o /tmp/discord_resp.txt) || true
+              "$WEBHOOK" -w "%{http_code}" -o "$tmpfile") || true
+
             echo "Discord response (body):"
-            if [ -s /tmp/discord_resp.txt ]; then
-              cat /tmp/discord_resp.txt || true
+            if [ -s "$tmpfile" ]; then
+              cat "$tmpfile" || true
             else
               echo "(no body)"
             fi
+
             echo "HTTP status: $http_status"
+            rm -f "$tmpfile"
+
             if [ "$http_status" -ge 400 ]; then
+              echo "Webhook returned HTTP $http_status — failing job." >&2
               exit 1
             fi
           done
