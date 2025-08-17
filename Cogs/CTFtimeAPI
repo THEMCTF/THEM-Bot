@@ -3,7 +3,7 @@ from discord.ext import commands
 import datetime
 import requests
 
-class CTFUpcoming(commands.Cog):
+class CTFtimeAPI(commands.Cog):
     """Cog for fetching upcoming CTF events from CTFtime"""
 
     def __init__(self, bot):
