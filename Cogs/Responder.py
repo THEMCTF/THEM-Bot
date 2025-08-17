@@ -89,6 +89,7 @@ class MessageResponder(commands.Cog):
             print(
                 f"\033[34m{message.author.display_name} triggered THEM response\033[0m"
             )
+            themCounter += 1 # TODO: make this use a json5 file (cuz fk you i like json5 more then json) -starry
 
         # time.sleep(5)  # commented out to avoid blocking async loop
 
