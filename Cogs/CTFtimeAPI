@@ -4,7 +4,7 @@ import datetime
 import requests
 
 class CTFtimeAPI(commands.Cog):
-    """Cog for fetching upcoming CTF events from CTFtime""" # comments be like : [shocked]
+    """Cog for fetching upcoming CTF events from CTFtime""" # comments be like: [shocked]
 
     def __init__(self, bot):
         self.bot = bot
@@ -20,7 +20,7 @@ class CTFtimeAPI(commands.Cog):
         r.raise_for_status()
         return r.json()
 
-    @commands.command(name="upcoming")
+    @commands.command(name="upcoming", description="Gets the upcoming CTFs")
     async def upcoming(self, inter, index: int = 0):
         """Check upcoming events (like Discord.js version)"""
         now = int(datetime.datetime.now().timestamp())
