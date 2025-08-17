@@ -21,7 +21,7 @@ class CTFtimeAPI(commands.Cog):
         return r.json()
 
     @commands.command(name="upcoming")
-    async def upcoming(self, ctx, index: int = 0):
+    async def upcoming(self, inter, index: int = 0):
         """Check upcoming events (like Discord.js version)"""
         now = int(datetime.datetime.now().timestamp())
 
@@ -29,15 +29,15 @@ class CTFtimeAPI(commands.Cog):
             events = self.get_events(now, "", 10)
 
             if not events:
-                await ctx.reply("No upcoming CTFs found!", mention_author=True)
+                await inter.response.send_message("No upcoming CTFs found!", mention_author=True)
                 return
                 
-                if index < 0:
-                await ctx.reply("Invalid index given", mention_author=True)
+            if index < 0:
+                await inter.response.send_message("Invalid index given", mention_author=True)
                 return
 
             if index >= len(events):
-                await ctx.reply(
+                await inter.response.send_message(
                     f"There are only {len(events)} upcoming events. Please choose an index below {len(events)}.",
                     mention_author=True,
                 )
@@ -46,11 +46,11 @@ class CTFtimeAPI(commands.Cog):
             cur_event = events[index]
 
             # embed
-            embed = discord.Embed(
+            embed = disnake.Embed(
                 title=cur_event.get("title", "Untitled Event"),
                 url=cur_event.get("ctftime_url", ""),
                 description=cur_event.get("description", "No description provided."),
-                color=discord.Color.red()
+                color=disnake.Color.red()
             )
 
             if cur_event.get("logo"):
@@ -66,10 +66,10 @@ class CTFtimeAPI(commands.Cog):
             embed.add_field(name="Start", value=start_time.strftime("%b %d %Y %I:%M %p %Z"), inline=True)
             embed.add_field(name="Finish", value=finish_time.strftime("%b %d %Y %I:%M %p %Z"), inline=True)
 
-            await ctx.send(embed=embed)
+            await inter.response.send_message(embed=embed)
 
         except Exception as e:
-            await ctx.reply(f"Error getting events: {e}", mention_author=True)
+            await inter.response.send_message(f"Error getting events: {e}", mention_author=True)
 
 
 def setup(bot):
