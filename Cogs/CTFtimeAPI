@@ -1,4 +1,4 @@
-import disnake
+import disnake # :)
 from disnake.ext import commands
 import datetime
 import requests
