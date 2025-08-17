@@ -4,7 +4,7 @@ import datetime
 import requests
 
 class CTFtimeAPI(commands.Cog):
-    """Cog for fetching upcoming CTF events from CTFtime"""
+    """Cog for fetching upcoming CTF events from CTFtime""" # comments be like : [shocked]
 
     def __init__(self, bot):
         self.bot = bot
