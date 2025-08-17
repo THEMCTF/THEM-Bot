@@ -76,24 +76,16 @@ jobs:
               fi
               AUTHOR_ICON="https://github.com/$AUTHOR_USERNAME.png"
 
-              # Compose title/description for commits
-              commit_label="${COMMIT_COUNT} new commit"
-              if [ "$COMMIT_COUNT" -ne 1 ]; then
-                commit_label="${commit_label}s"
-              fi
-              TITLE="[${REPO_NAME}:${BRANCH}] ${commit_label}"
-              DESCRIPTION="$COMMITS_TEXT"
+              # (Do not set TITLE/DESCRIPTION here so the payload step uses per-commit hyperlinks)
               ;;
 
             issues|issue_comment)
-              # Issue related events
               ISSUE_ACTION=$(jq -r '.action // ""' "$EVENT_JSON")
               ISSUE_NUMBER=$(jq -r '.issue.number // empty' "$EVENT_JSON")
               ISSUE_TITLE=$(jq -r '.issue.title // ""' "$EVENT_JSON")
               ISSUE_BODY=$(jq -r '.issue.body // ""' "$EVENT_JSON")
               ISSUE_URL=$(jq -r '.issue.html_url // ""' "$EVENT_JSON")
 
-              # If it's an issue_comment event, prefer comment excerpt
               if [ "$EVENT_TYPE" = "issue_comment" ]; then
                 COMMENT_BODY=$(jq -r '.comment.body // ""' "$EVENT_JSON")
                 COMMENT_URL=$(jq -r '.comment.html_url // ""' "$EVENT_JSON")
@@ -112,7 +104,6 @@ jobs:
                 TITLE="[${REPO_NAME}] Issue ${ISSUE_ACTION}: #${ISSUE_NUMBER} ${ISSUE_TITLE}"
               fi
 
-              # Author: use actor for issue/comment events
               AUTHOR="${GITHUB_ACTOR}"
               AUTHOR_ICON="https://github.com/${GITHUB_ACTOR}.png"
               ;;
@@ -128,7 +119,6 @@ jobs:
               DESCRIPTION="$PR_BODY"
               BUTTON_URL="$PR_URL"
 
-              # Author: PR user (fallback to actor)
               PR_USER_LOGIN=$(jq -r '.pull_request.user.login // empty' "$EVENT_JSON")
               if [ -n "$PR_USER_LOGIN" ]; then
                 AUTHOR="$PR_USER_LOGIN"
@@ -140,7 +130,6 @@ jobs:
               ;;
 
             *)
-              # Fallback for unhandled event types
               TITLE="[${REPO_NAME}] ${EVENT_TYPE} event"
               DESCRIPTION="Event type ${EVENT_TYPE} occurred. See repository for details."
               BUTTON_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
@@ -149,7 +138,6 @@ jobs:
               ;;
           esac
 
-          # Export variables for later steps
           echo "REPO_NAME=$REPO_NAME" >> $GITHUB_ENV
           echo "BRANCH=$BRANCH" >> $GITHUB_ENV
           echo "COMMIT_COUNT=$COMMIT_COUNT" >> $GITHUB_ENV
@@ -180,31 +168,37 @@ jobs:
           commits_text = os.getenv("COMMITS_TEXT", "No commits found.")
           commit_url = os.getenv("BUTTON_URL", "")
 
-          # If TITLE/DESCRIPTION were provided (issue/pr/event), use them directly
+          server_url = os.getenv("GITHUB_SERVER_URL", "https://github.com")
+          repo_full = os.getenv("GITHUB_REPOSITORY", "")
+
+          def hyperlink_hashes_per_commit(text):
+              lines = text.splitlines()
+              new_lines = []
+              for line in lines:
+                  m = re.match(r'^([0-9a-fA-F]{7,40})(?:\s+)(.*)$', line)
+                  if m and repo_full:
+                      sha = m.group(1)
+                      rest = m.group(2)
+                      url = f"{server_url}/{repo_full}/commit/{sha}"
+                      new_lines.append(f"[{sha}]({url}) **|** {rest}")
+                  else:
+                      new_lines.append(line)
+              return "\n".join(new_lines)
+
           if title_env:
               title = title_env
               description = description_env or ""
               url = commit_url or ""
           else:
-              # Fallback to commit-style payload generation
               commit_label = f"{commit_count} new commit" + ("" if commit_count == 1 else "s")
-              def hyperlink_hashes(text, url):
-                  lines = text.splitlines()
-                  new_lines = []
-                  for line in lines:
-                      match = re.match(r'^([0-9a-f]{7,40})( .*)?$', line)
-                      if match and url:
-                          hash_part = match.group(1)
-                          rest = match.group(2) or ""
-                          new_lines.append(f"[{hash_part}]({url}) **|** {rest}")
-                      else:
-                          new_lines.append(line)
-                  return "\n".join(new_lines)
-              description = hyperlink_hashes(commits_text, commit_url)
+              description = hyperlink_hashes_per_commit(commits_text)
               title = f"[{repo_name}:{branch}] {commit_label}"
               url = commit_url or ""
 
           payload = {
+              # send silently (no push notification) and prevent pings
+              "flags": 4096,
+              "allowed_mentions": {"parse": []},
               "embeds": [
                   {
                       "author": {
