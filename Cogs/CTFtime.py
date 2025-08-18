@@ -1,19 +1,10 @@
-<<<<<<< HEAD
-import disnake # :)
-=======
 import disnake
->>>>>>> refs/remotes/origin/main
 from disnake.ext import commands
 import datetime
 import requests
 
-<<<<<<< HEAD
 class CTFtimeAPI(commands.Cog):
     """Cog for fetching upcoming CTF events from CTFtime""" # comments be like: [shocked]
-=======
-class CTFUpcoming(commands.Cog):
-    """Cog for fetching upcoming CTF events from CTFtime"""
->>>>>>> refs/remotes/origin/main
 
     def __init__(self, bot):
         self.bot = bot
@@ -29,39 +20,21 @@ class CTFUpcoming(commands.Cog):
         r.raise_for_status()
         return r.json()
 
-<<<<<<< HEAD
     @commands.command(name="upcoming", description="Gets the upcoming CTFs")
     async def upcoming(self, inter, index: int = 0):
         """Check upcoming events (like Discord.js version)"""
         now = int(datetime.datetime.now().timestamp())
-=======
-    @commands.command(name="upcoming")
-	async def upcoming(self, inter, index: int = 0):
-         """Check upcoming events (like Discord.js version)"""
-         now = int(datetime.datetime.now().timestamp())
-@@ -30,13 +30,13 @@ class CTFtimeAPI(commands.Cog):
->>>>>>> refs/remotes/origin/main
 
         try:
             events = self.get_events(now, "", 10)
 
             if not events:
-<<<<<<< HEAD
                 await inter.response.send_message("No upcoming CTFs found!", mention_author=True)
                 return
                 
             if index < 0:
                 await inter.response.send_message("Invalid index given", mention_author=True)
                 return
-=======
-				await inter.response.send_message("No upcoming CTFs found!", mention_author=True)
-                 return
-
-            # Index validation
-				if index < 0:
-                 await inter.response.send_message("Invalid index given", mention_author=True)
-                 return
->>>>>>> refs/remotes/origin/main
 
             if index >= len(events):
                 await inter.response.send_message(
@@ -74,20 +47,12 @@ class CTFUpcoming(commands.Cog):
 
             # embed
             embed = disnake.Embed(
-<<<<<<< HEAD
                 title=cur_event.get("title", "Untitled Event"),
                 url=cur_event.get("ctftime_url", ""),
                 description=cur_event.get("description", "No description provided."),
                 color=disnake.Color.red()
             )
 
-=======
-			 title=cur_event.get("title", "Untitled Event"),
-			 url=cur_event.get("ctftime_url", ""),
-			 escription=cur_event.get("description", "No description provided."),
-			 color=disnake.Color.red()
-			 )
->>>>>>> refs/remotes/origin/main
             if cur_event.get("logo"):
                 embed.set_thumbnail(url=cur_event["logo"])
 
@@ -103,16 +68,9 @@ class CTFUpcoming(commands.Cog):
 
             await inter.response.send_message(embed=embed)
 
-<<<<<<< HEAD
         except Exception as e:
             await inter.response.send_message(f"Error getting events: {e}", mention_author=True)
 
-=======
- await inter.response.send_message(
-         f"There are only {len(events)} upcoming events. Please choose an index below {len(events)}.",
-		 mention_author=True,
-@@ -47,9 +47,9 @@ class CTFtimeAPI(commands.Cog):
->>>>>>> refs/remotes/origin/main
 
 def setup(bot):
     bot.add_cog(CTFtimeAPI(bot))

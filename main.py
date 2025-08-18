@@ -25,6 +25,7 @@ bot.load_extension("Cogs.Responder")  # Responder duh
 bot.load_extension("Cogs.Moderation")
 bot.load_extension("Cogs.Starry")
 bot.load_extension("Cogs.Outside")
+bot.load_extension("Cogs.CTFtime")
 
 
 @bot.event
