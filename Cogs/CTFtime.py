@@ -20,7 +20,7 @@ class CTFtimeAPI(commands.Cog):
         r.raise_for_status()
         return r.json()
 
-    @commands.command(name="upcoming", description="Gets the upcoming CTFs")
+    @commands.slash_command(name="upcoming", description="Gets the upcoming CTFs")
     async def upcoming(self, inter, index: int = 0):
         """Check upcoming events (like Discord.js version)"""
         now = int(datetime.datetime.now().timestamp())

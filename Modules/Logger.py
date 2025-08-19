@@ -7,8 +7,16 @@ import disnake
 import json5
 from disnake.ext import commands
 
-# Load LOGGING_CHANNEL from a JSON file
-with open("/Users/starry/Desktop/Code/THEMc/bot/config.json5", "r") as f:
+# Get the directory of the current script
+current_dir = os.path.dirname(os.path.abspath(__file__))
+
+# Go one folder up and join with config.json5
+config_path = os.path.join(current_dir, "..", "config.json5")
+
+# Normalize the path (resolves "..")
+config_path = os.path.normpath(config_path)
+
+with open(config_path, "r") as f:
     data = json5.load(f)
     LOGGING_CHANNEL = data.get("LOGGING_CHANNEL", [])
     ENABLE_CHANNEL_LOGGING = data.get("ENABLE_CHANNEL_LOGGING", [])
