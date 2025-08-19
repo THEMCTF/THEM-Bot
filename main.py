@@ -29,7 +29,7 @@ bot.load_extension("Cogs.CTFtime")
 
 
 @bot.event
-async def on_ready():
+async def on_ready(): # TODO: FIX
     # List all application commands
     # help_text = f"\033[34mAvailable slash commands:\n"
     # for cmd in bot.application_commands:
