@@ -33,14 +33,13 @@ class MessageResponder(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
+        self.handled = set()
 
     REQUIRED_REACTIONS = {
     "<:them:1400018402059485224>",
     "<:on:YOUR_ON_EMOJI_ID>",
     "<:top:YOUR_TOP_EMOJI_ID>",
     }
-
-    handled = set()  # can be at the top of the class
 
     @commands.Cog.listener()
     async def on_reaction_add(self, reaction: disnake.Reaction, user: disnake.User):
@@ -53,14 +52,14 @@ class MessageResponder(commands.Cog):
         if (disnake.utils.utcnow() - message.created_at).total_seconds() > 30:
             return
 
-        if message.id in handled:
+        if message.id in self.handled:
             return
 
         current = {str(r.emoji) for r in message.reactions}
 
         if self.REQUIRED_REACTIONS.issubset(current):
-            handled.add(message.id)
-            await them_reaction(message=reaction)
+            self.handled.add(message.id)
+            await self.them_reaction(message=reaction)
 
 
     @commands.Cog.listener()
@@ -112,7 +111,7 @@ class MessageResponder(commands.Cog):
             or has_gif_url
             or has_gif_embed
         ):
-            await them_reaction(message=message)
+            await self.them_reaction(message=message)
 
     async def them_reaction(self, message: disnake.Message):
         reaction_choice = random.randint(0, 3)
