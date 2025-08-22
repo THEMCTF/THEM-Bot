@@ -34,6 +34,17 @@ class MessageResponder(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    @bot.event
+    async def on_reaction_add(reaction, user):
+        if user == bot.user:  # Ignore reactions from the bot itself
+            return
+
+        print(f"{user.display_name} reacted with {reaction.emoji} on message ID {reaction.message.id}")
+
+        # Example: Check for a specific emoji
+        if str(reaction.emoji) == "👍":
+            await reaction.message.channel.send(f"Someone liked it!")
+
     @commands.Cog.listener()
     async def on_message(self, message: disnake.Message):
         if message.author.bot or message.channel.id in RESTRICTED:
@@ -83,23 +94,24 @@ class MessageResponder(commands.Cog):
             or has_gif_url
             or has_gif_embed
         ):
-            reaction_choice = random.randint(0, 3)
-            match reaction_choice:
-                case 0:
-                    await message.channel.send("<:THEM:1400018402059485224> :on: :top:")
-                case 1:
-                    await message.channel.send("THEM?! ON?! TOP?!")
-                case 2:
-                    await message.channel.send("THEM ON TOP")
-                case 3:
-                    await message.channel.send(self.TARGET_GIF_URL)
+            await them_reaction(message=message)
 
-            print(
-                f"\033[34m{message.author.display_name} triggered THEM response\033[0m"
-            )
-            themCounter += 1 # TODO: make this use a json5 file (cuz fk you i like json5 more then json) -starry
+    async def them_reaction(self, message: disnake.Message):
+        reaction_choice = random.randint(0, 3)
+        match reaction_choice:
+            case 0:
+                await message.channel.send("<:THEM:1400018402059485224> :on: :top:")
+            case 1:
+                await message.channel.send("THEM?! ON?! TOP?!")
+            case 2:
+                await message.channel.send("THEM ON TOP")
+            case 3:
+                await message.channel.send(self.TARGET_GIF_URL)
 
-        # time.sleep(5)  # commented out to avoid blocking async loop
+        print(
+            f"\033[34m{message.author.display_name} triggered THEM response\033[0m"
+        )# TODO: use logging
+        themCounter += 1 # TODO: make this use a json5 file (cuz fk you i like json5 more then json) -starry
 
 
 def setup(bot):
