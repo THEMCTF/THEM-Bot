@@ -34,16 +34,34 @@ class MessageResponder(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @bot.event
-    async def on_reaction_add(reaction, user):
-        if user == bot.user:  # Ignore reactions from the bot itself
+    REQUIRED_REACTIONS = {
+    "<:them:1400018402059485224>",
+    "<:on:YOUR_ON_EMOJI_ID>",
+    "<:top:YOUR_TOP_EMOJI_ID>",
+    }
+
+    handled = set()  # can be at the top of the class
+
+    @commands.Cog.listener()
+    async def on_reaction_add(self, reaction: disnake.Reaction, user: disnake.User):
+        if user.bot:
             return
 
-        print(f"{user.display_name} reacted with {reaction.emoji} on message ID {reaction.message.id}")
+        message = reaction.message
 
-        # Example: Check for a specific emoji
-        if str(reaction.emoji) == "👍":
-            await reaction.message.channel.send(f"Someone liked it!")
+        # only check messages created in the last 30 seconds
+        if (disnake.utils.utcnow() - message.created_at).total_seconds() > 30:
+            return
+
+        if message.id in handled:
+            return
+
+        current = {str(r.emoji) for r in message.reactions}
+
+        if self.REQUIRED_REACTIONS.issubset(current):
+            handled.add(message.id)
+            await them_reaction(message=reaction)
+
 
     @commands.Cog.listener()
     async def on_message(self, message: disnake.Message):
