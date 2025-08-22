@@ -34,11 +34,12 @@ class MessageResponder(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.handled = set()
+        self.themCounter = 0
 
     REQUIRED_REACTIONS = {
-    "<:them:1400018402059485224>",
-    "<:on:YOUR_ON_EMOJI_ID>",
-    "<:top:YOUR_TOP_EMOJI_ID>",
+        "<:them:1400018402059485224>",
+        "🔛",
+        "🔝",
     }
 
     @commands.Cog.listener()
@@ -59,7 +60,7 @@ class MessageResponder(commands.Cog):
 
         if self.REQUIRED_REACTIONS.issubset(current):
             self.handled.add(message.id)
-            await self.them_reaction(message=reaction)
+            await self.them_reaction(message=message)
 
 
     @commands.Cog.listener()
@@ -114,7 +115,7 @@ class MessageResponder(commands.Cog):
             await self.them_reaction(message=message)
 
     async def them_reaction(self, message: disnake.Message):
-        reaction_choice = random.randint(0, 3)
+        reaction_choice = random.randint(0, 4)
         match reaction_choice:
             case 0:
                 await message.channel.send("<:THEM:1400018402059485224> :on: :top:")
@@ -124,11 +125,16 @@ class MessageResponder(commands.Cog):
                 await message.channel.send("THEM ON TOP")
             case 3:
                 await message.channel.send(self.TARGET_GIF_URL)
+            case 4:
+                await message.add_reaction("<:them:1400018402059485224>")
+                await message.add_reaction("🔛")
+                await message.add_reaction("🔝")
+
 
         print(
             f"\033[34m{message.author.display_name} triggered THEM response\033[0m"
         )# TODO: use logging
-        themCounter += 1 # TODO: make this use a json5 file (cuz fk you i like json5 more then json) -starry
+        self.themCounter += 1 # TODO: make this use a json5 file (cuz fk you i like json5 more then json) -starry
 
 
 def setup(bot):
