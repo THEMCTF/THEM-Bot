@@ -35,6 +35,18 @@ class OutsideCog(commands.Cog):
             user=inter.author,
         )
 
+    @commands.install_types(user=True)
+    @commands.slash_command(name="them", description="check", dm_permission=True)
+    async def them(self, inter: disnake.AppCommandInteraction):
+        await inter.response.send_message(f"THEM?! ON TOP")
+        guild_name = inter.guild.name if inter.guild else "Direct Message"
+        await Logger.log_action(
+            self,
+            text=f"**/them** was ran in {guild_name}",
+            color=disnake.Colour.red(),
+            type="Outside",
+            user=inter.author,
+        )
 
 def setup(bot):
     bot.add_cog(OutsideCog(bot))

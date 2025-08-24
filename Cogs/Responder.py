@@ -118,7 +118,7 @@ class MessageResponder(commands.Cog):
         reaction_choice = random.randint(0, 4)
         match reaction_choice:
             case 0:
-                await message.channel.send("<:THEM:1400018402059485224> :on: :top:")
+                await message.channel.send("<:IMG_3721:1408549102496518314> :on: :top:")
             case 1:
                 await message.channel.send("THEM?! ON?! TOP?!")
             case 2:
@@ -126,7 +126,7 @@ class MessageResponder(commands.Cog):
             case 3:
                 await message.channel.send(self.TARGET_GIF_URL)
             case 4:
-                await message.add_reaction("<:them:1400018402059485224>")
+                await message.add_reaction("<:IMG_3721:1408549102496518314>")
                 await message.add_reaction("🔛")
                 await message.add_reaction("🔝")
 
