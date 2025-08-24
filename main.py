@@ -40,8 +40,6 @@ async def on_ready(): # TODO: FIX
     print("\033[32mCogs loaded:", list(bot.cogs.keys()))
 
     print(f"\033[32mBot is ready and logged in as {bot.user}\033[0m")
-    
-    await bot.sync_application_commands()
 
 
 # Run the bot and monitor the file concurrently
