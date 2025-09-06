@@ -81,7 +81,10 @@ class Starry(commands.Cog):
     @commands.slash_command(
         name="testing", description="this command is subject to change"
     )
-    async def testing(self):
+    async def testing(
+        self,
+        inter: disnake.ApplicationCommandInteraction,
+    ):
         bot = self.bot
         # List all servers the bot is in
         if 1 == 2:
