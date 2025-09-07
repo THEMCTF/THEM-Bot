@@ -1,6 +1,6 @@
 {
   "RESTRICTED": [
-    1382763557640470615, // anoucments
+    1382763557640470615, // annoucments
     //1382763557816500227, // general
     1389155950002311219, // Tip of the day
     1399381088920670281, // ctf diary
@@ -13,5 +13,5 @@
     1382763558000918577 // mod logs
   ] ,
   "LOGGING_CHANNEL": 1382763558000918577,
-  "ENABLE_CHANNEL_LOGGING": false
+  "ENABLE_CHANNEL_LOGGING": true
 }
