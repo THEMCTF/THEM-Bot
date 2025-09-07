@@ -19,6 +19,7 @@ config_path = os.path.normpath(config_path)
 with open(config_path, "r") as f:
     data = json5.load(f)
     RESTRICTED = data.get("RESTRICTED", [])
+    #RESTRICTED = [1, 2]
 
 
 class MessageResponder(commands.Cog):
@@ -86,7 +87,7 @@ class MessageResponder(commands.Cog):
             reaction_choice = random.randint(0, 3)
             match reaction_choice:
                 case 0:
-                    await message.channel.send("<:THEM:1400018402059485224> :on: :top:")
+                    await message.channel.send("<:them:1410349269948436530> :on: :top:")
                 case 1:
                     await message.channel.send("THEM?! ON?! TOP?!")
                 case 2:
@@ -97,7 +98,7 @@ class MessageResponder(commands.Cog):
             print(
                 f"\033[34m{message.author.display_name} triggered THEM response\033[0m"
             )
-            themCounter += 1 # TODO: make this use a json5 file (cuz fk you i like json5 more then json) -starry
+            # themCounter += 1 # TODO: make this use a json5 file (cuz fk you i like json5 more then json) -starry
 
         # time.sleep(5)  # commented out to avoid blocking async loop
 

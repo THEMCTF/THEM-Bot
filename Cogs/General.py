@@ -65,6 +65,10 @@ class GeneralCog(commands.Cog):
             "not added ping starry if you really want it", ephemeral=True
         )
 
+    @commands.slash_command(name="source", description="Sends HER?! source code")
+    async def source(self, inter: disnake.ApplicationCommandInteraction, message):
+        await inter.response.send_message("https://github.com/THEMCTF/THEM-Bot")
+
     @commands.slash_command(name="help", description="List all slash commands.")
     async def help_slash(self, inter: disnake.ApplicationCommandInteraction):
         help_text = "Available slash commands:\n"
