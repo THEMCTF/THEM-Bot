@@ -26,10 +26,11 @@ bot.load_extension("Cogs.Moderation")
 # bot.load_extension("Cogs.Starry")
 bot.load_extension("Cogs.Outside")
 bot.load_extension("Cogs.CTFtime")
+bot.load_extension("Cogs.CTFother")
 
 
 @bot.event
-async def on_ready(): # TODO: FIX
+async def on_ready():  # TODO: FIX
     # List all application commands
     # help_text = f"\033[34mAvailable slash commands:\n"
     # for cmd in bot.application_commands:

@@ -1,10 +1,12 @@
-import disnake
-from disnake.ext import commands
 import datetime
+
+import disnake
 import requests
+from disnake.ext import commands
+
 
 class CTFtimeAPI(commands.Cog):
-    """Cog for fetching upcoming CTF events from CTFtime""" # comments be like: [shocked]
+    """Cog for fetching upcoming CTF events from CTFtime"""  # comments be like: [shocked]
 
     def __init__(self, bot):
         self.bot = bot
@@ -29,11 +31,15 @@ class CTFtimeAPI(commands.Cog):
             events = self.get_events(now, "", 10)
 
             if not events:
-                await inter.response.send_message("No upcoming CTFs found!", mention_author=True)
+                await inter.response.send_message(
+                    "No upcoming CTFs found!", mention_author=True
+                )
                 return
-                
+
             if index < 0:
-                await inter.response.send_message("Invalid index given", mention_author=True)
+                await inter.response.send_message(
+                    "Invalid index given", mention_author=True
+                )
                 return
 
             if index >= len(events):
@@ -50,26 +56,46 @@ class CTFtimeAPI(commands.Cog):
                 title=cur_event.get("title", "Untitled Event"),
                 url=cur_event.get("ctftime_url", ""),
                 description=cur_event.get("description", "No description provided."),
-                color=disnake.Color.red()
+                color=disnake.Color.red(),
             )
 
             if cur_event.get("logo"):
                 embed.set_thumbnail(url=cur_event["logo"])
 
-            embed.add_field(name="Format", value=cur_event.get("format", "N/A"), inline=True)
+            embed.add_field(
+                name="Format", value=cur_event.get("format", "N/A"), inline=True
+            )
             embed.add_field(name="Link", value=cur_event.get("url", "N/A"), inline=True)
-            embed.add_field(name="CTFTime URL", value=cur_event.get("ctftime_url", "N/A"), inline=False)
+            embed.add_field(
+                name="CTFTime URL",
+                value=cur_event.get("ctftime_url", "N/A"),
+                inline=False,
+            )
 
             # timestamps
-            start_time = datetime.datetime.fromisoformat(cur_event["start"].replace("Z", "+00:00"))
-            finish_time = datetime.datetime.fromisoformat(cur_event["finish"].replace("Z", "+00:00"))
-            embed.add_field(name="Start", value=start_time.strftime("%b %d %Y %I:%M %p %Z"), inline=True)
-            embed.add_field(name="Finish", value=finish_time.strftime("%b %d %Y %I:%M %p %Z"), inline=True)
+            start_time = datetime.datetime.fromisoformat(
+                cur_event["start"].replace("Z", "+00:00")
+            )
+            finish_time = datetime.datetime.fromisoformat(
+                cur_event["finish"].replace("Z", "+00:00")
+            )
+            embed.add_field(
+                name="Start",
+                value=start_time.strftime("%b %d %Y %I:%M %p %Z"),
+                inline=True,
+            )
+            embed.add_field(
+                name="Finish",
+                value=finish_time.strftime("%b %d %Y %I:%M %p %Z"),
+                inline=True,
+            )
 
             await inter.response.send_message(embed=embed)
 
         except Exception as e:
-            await inter.response.send_message(f"Error getting events: {e}", mention_author=True)
+            await inter.response.send_message(
+                f"Error getting events: {e}", mention_author=True
+            )
 
 
 def setup(bot):
