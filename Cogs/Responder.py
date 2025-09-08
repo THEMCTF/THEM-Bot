@@ -72,7 +72,7 @@ class MessageResponder(commands.Cog):
             att.filename.lower().endswith(".gif") for att in message.attachments
         )
         has_gif_url = bool(self.GIF_URL_RE.search(content))
-        has_gif_embed = any(
+        has_gif_embed = all(
             embed.image
             and isinstance(embed.image.url, str)
             and embed.image.url.lower().endswith(".gif")
