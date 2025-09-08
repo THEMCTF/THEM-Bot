@@ -19,6 +19,7 @@ config_path = os.path.normpath(config_path)
 with open(config_path, "r") as f:
     data = json5.load(f)
     RESTRICTED = data.get("RESTRICTED", [])
+    COOLDOWN = int(data.get("COOLDOWN", []))
 
 
 class MessageResponder(commands.Cog):
@@ -33,6 +34,7 @@ class MessageResponder(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
+        self.last_trigger_time = 0
 
     @commands.Cog.listener()
     async def on_message(self, message: disnake.Message):
@@ -80,6 +82,10 @@ class MessageResponder(commands.Cog):
         )
 
         # Final condition: trigger if keyword or exact GIF URL or any other gif present
+        time_since = time.time() - self.last_trigger_time
+
+        if time_since < COOLDOWN:
+            return
         if (
             has_keyword
             or has_exact_gif_url
@@ -101,6 +107,7 @@ class MessageResponder(commands.Cog):
             print(
                 f"\033[34m{message.author.display_name} triggered THEM response\033[0m"
             )
+            self.last_trigger_time = time.time()
             # themCounter += 1 # TODO: make this use a json5 file (cuz fk you i like json5 more then json) -starry
 
         # time.sleep(5)  # commented out to avoid blocking async loop
