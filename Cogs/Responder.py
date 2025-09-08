@@ -19,7 +19,6 @@ config_path = os.path.normpath(config_path)
 with open(config_path, "r") as f:
     data = json5.load(f)
     RESTRICTED = data.get("RESTRICTED", [])
-    #RESTRICTED = [1, 2]
 
 
 class MessageResponder(commands.Cog):
@@ -37,7 +36,11 @@ class MessageResponder(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message: disnake.Message):
-        if message.author.bot or message.channel.id in RESTRICTED:
+        if (
+            message.author.bot
+            or message.channel.id in RESTRICTED
+            or isinstance(message.channel, disnake.DMChannel)
+        ):
             return
 
         content = message.content or ""
