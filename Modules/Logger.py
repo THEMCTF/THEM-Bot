@@ -17,18 +17,24 @@ config_path = os.path.join(current_dir, "..", "config.json5")
 config_path = os.path.normpath(config_path)
 
 with open(config_path, "r") as f:
-    data = json5.load(f)
+    data = json5.load(f)  # make this use yml later
     LOGGING_CHANNEL = data.get("LOGGING_CHANNEL", [])
     ENABLE_CHANNEL_LOGGING = data.get("ENABLE_CHANNEL_LOGGING", [])
+    ENABLE_LOG_TO_FILE = data.get("ENABLE_LOG_TO_FILE", [])
 
 
 class Logger:
     def __init__(self, bot):
         self.bot = bot
+        self.rendition = 0  # this words just sounds cool, it's not really related -starry [9/10/2025]
 
-    async def log_action(self, text, color, type, user=None):
+    async def __call__(self, text, color, type, priority, user=None):
+        if ENABLE_LOG_TO_FILE == True:
+            # TODO: write code to log the message like: [{date}] {user} {message}  to a txt file with a new line for every message
         if ENABLE_CHANNEL_LOGGING == False:
             print(f"{type}: {text}; {user}")
+            return
+        if priority < self.rendition:
             return
         channel = self.bot.get_channel(LOGGING_CHANNEL)
         if channel:
