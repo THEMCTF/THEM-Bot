@@ -122,8 +122,20 @@ class Logger:
 
         # Use provided parameters or fall back to defaults
         log_color = color or self.default_color
-        log_type = type or self.default_type
         log_priority = priority or self.default_priority
+
+        # Auto-detect cog name if type not provided
+        if type:
+            log_type = type
+        elif self.default_type != "INFO":
+            log_type = self.default_type
+        else:
+            # Try to get the cog name from the function's qualname
+            if hasattr(func, "__qualname__") and "." in func.__qualname__:
+                cog_name = func.__qualname__.split(".")[0]
+                log_type = cog_name
+            else:
+                log_type = "404"
 
         if inspect.iscoroutinefunction(func):
 
@@ -235,6 +247,17 @@ class Logger:
                 return result
 
             return sync_wrapper
+
+
+bot = None
+logger = None
+
+
+def setup_logger(bot_instance):
+    global bot, logger
+    bot = bot_instance
+    logger = Logger(bot_instance)
+    return logger
 
 
 # Usage examples:

@@ -5,7 +5,7 @@ import time
 import disnake
 from disnake.ext import commands
 
-from Modules.Logger import Logger
+from Modules import log
 
 
 class GeneralCog(commands.Cog):
@@ -37,11 +37,11 @@ class GeneralCog(commands.Cog):
             user=inter.author,
         )
 
-    @Logger
     @commands.slash_command(name="source", description="Sends HER?! source code")
     async def source(self, inter: disnake.ApplicationCommandInteraction):
         await inter.response.send_message("https://github.com/THEMCTF/THEM-Bot")
 
+    @log
     @commands.slash_command(name="help", description="List all slash commands.")
     async def help_slash(self, inter: disnake.ApplicationCommandInteraction):
         help_text = "Available slash commands:\n"

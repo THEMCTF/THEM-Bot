@@ -5,6 +5,8 @@ import json5
 from disnake.ext import commands
 from dotenv import load_dotenv
 
+from Modules import setup_logger
+
 photo = """\033[32m hi\033[0m"""
 
 print(photo)
@@ -28,6 +30,8 @@ with open(config_path, "r") as f:
 
 # Create the bot without a command prefix since we're using ONLY slash commands.
 bot = commands.InteractionBot(intents=disnake.Intents.all())
+
+setup_logger(bot)
 
 # Load cogs (ensure these .py files exist in your bot's folder).
 bot.load_extension("Cogs.General")  # General commands
