@@ -372,4 +372,4 @@ class MessageResponder(commands.Cog):
 
 def setup(bot):
     bot.add_cog(MessageResponder(bot))
-    bot.add_cog(MessageResponder.DM_Manager(bot))
+    # bot.add_cog(MessageResponder.DM_Manager(bot))

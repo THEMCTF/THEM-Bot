@@ -37,6 +37,7 @@ class GeneralCog(commands.Cog):
             user=inter.author,
         )
 
+    @Logger
     @commands.slash_command(name="source", description="Sends HER?! source code")
     async def source(self, inter: disnake.ApplicationCommandInteraction):
         await inter.response.send_message("https://github.com/THEMCTF/THEM-Bot")
@@ -47,13 +48,6 @@ class GeneralCog(commands.Cog):
         for cmd in self.bot.application_commands:
             help_text += f"/{cmd.name}: {cmd.description}\n"
         await inter.response.send_message(help_text, ephemeral=True)
-        await Logger.log_action(
-            self,
-            text=f"**/help** was ran",
-            color=disnake.Colour.red(),
-            type="General",
-            user=inter.author,
-        )
 
 
 def setup(bot):

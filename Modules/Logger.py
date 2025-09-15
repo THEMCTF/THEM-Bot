@@ -91,7 +91,7 @@ class Logger:
         # Use provided parameters or fall back to defaults
         log_text = text or self.default_text or f"Function {func.__name__} called"
         log_color = color or self.default_color
-        log_type = type or self.default_type
+        log_type = type or __class__.__name__
         log_priority = priority or self.default_priority
 
         if inspect.iscoroutinefunction(func):
