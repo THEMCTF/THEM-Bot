@@ -37,8 +37,40 @@ class Logger:
     async def log(self, text, color, type, priority, user=None):
         """The actual logging method"""
         if ENABLE_LOG_TO_FILE == True:
-            # TODO: write code to log the message like: [{date}] {user} {message} to a txt file with a new line for every message
-            pass
+            # Log to file in proper JSON format
+            log_entry = {
+                "timestamp": datetime.datetime.now().isoformat(),
+                "user_id": user.id if user else None,
+                "username": str(user) if user else None,
+                "message": text,
+                "type": type,
+                "priority": priority,
+                "color": color,
+            }
+
+            # Write JSON to file (append mode)
+            log_file = os.path.join(current_dir, "bot_logs.json")
+            try:
+                # Read existing logs if file exists
+                if os.path.exists(log_file):
+                    with open(log_file, "r") as f:
+                        try:
+                            logs = json5.load(f)
+                            if not isinstance(logs, list):
+                                logs = []
+                        except:
+                            logs = []
+                else:
+                    logs = []
+
+                # Append new log entry
+                logs.append(log_entry)
+
+                # Write back to file
+                with open(log_file, "w") as f:
+                    json5.dump(logs, f, indent=2)
+            except Exception as e:
+                print(f"Error writing to log file: {e}")
 
         if ENABLE_CHANNEL_LOGGING == False:
             print(f"{type}: {text}; {user}")
@@ -89,9 +121,8 @@ class Logger:
             )
 
         # Use provided parameters or fall back to defaults
-        log_text = text or self.default_text or f"Function {func.__name__} called"
         log_color = color or self.default_color
-        log_type = type or __class__.__name__
+        log_type = type or self.default_type
         log_priority = priority or self.default_priority
 
         if inspect.iscoroutinefunction(func):
@@ -100,13 +131,34 @@ class Logger:
             async def async_wrapper(*args, **kwargs):
                 # Get user from context if available (for Discord commands)
                 user = None
-                if args and hasattr(args[0], "author"):  # Command context
+                # Handle disnake ApplicationCommandInteraction (slash commands)
+                if args and hasattr(args[0], "author"):  # Regular command context
                     user = args[0].author
+                elif args and hasattr(args[1], "author"):  # Cog method (self, inter)
+                    user = args[1].author
+                elif args and hasattr(args[0], "user"):  # Slash command interaction
+                    user = args[0].user
+                elif args and hasattr(
+                    args[1], "user"
+                ):  # Cog slash command (self, inter)
+                    user = args[1].user
                 elif "ctx" in kwargs and hasattr(kwargs["ctx"], "author"):
                     user = kwargs["ctx"].author
+                elif "inter" in kwargs and hasattr(kwargs["inter"], "user"):
+                    user = kwargs["inter"].user
 
-                # Log function call
-                call_text = log_text
+                # Generate log text
+                if text or self.default_text:
+                    call_text = text or self.default_text
+                else:
+                    if args or kwargs:
+                        call_text = (
+                            f"**/{func.__name__}** was ran with the context: {args}"
+                        )
+                    else:
+                        call_text = f"**/{func.__name__}** was ran"
+
+                # Add additional args info if log_args is enabled
                 if log_args and (args or kwargs):
                     call_text += f" with args: {args}, kwargs: {kwargs}"
 
@@ -133,11 +185,29 @@ class Logger:
                 user = None
                 if args and hasattr(args[0], "author"):
                     user = args[0].author
+                elif args and hasattr(args[1], "author"):  # Cog method
+                    user = args[1].author
+                elif args and hasattr(args[0], "user"):  # Slash command
+                    user = args[0].user
+                elif args and hasattr(args[1], "user"):  # Cog slash command
+                    user = args[1].user
                 elif "ctx" in kwargs and hasattr(kwargs["ctx"], "author"):
                     user = kwargs["ctx"].author
+                elif "inter" in kwargs and hasattr(kwargs["inter"], "user"):
+                    user = kwargs["inter"].user
 
-                # Log function call
-                call_text = log_text
+                # Generate log text
+                if text or self.default_text:
+                    call_text = text or self.default_text
+                else:
+                    if args or kwargs:
+                        call_text = (
+                            f"**/{func.__name__}** was ran with the context: {args}"
+                        )
+                    else:
+                        call_text = f"**/{func.__name__}** was ran"
+
+                # Add additional args info if log_args is enabled
                 if log_args and (args or kwargs):
                     call_text += f" with args: {args}, kwargs: {kwargs}"
 
