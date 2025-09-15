@@ -41,7 +41,7 @@ class GeneralCog(commands.Cog):
     async def source(self, inter: disnake.ApplicationCommandInteraction):
         await inter.response.send_message("https://github.com/THEMCTF/THEM-Bot")
 
-    @log
+    @log()
     @commands.slash_command(name="help", description="List all slash commands.")
     async def help_slash(self, inter: disnake.ApplicationCommandInteraction):
         help_text = "Available slash commands:\n"
