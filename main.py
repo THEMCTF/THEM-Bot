@@ -39,7 +39,7 @@ bot.load_extension("Cogs.Responder")  # Responder duh
 bot.load_extension("Cogs.Moderation")
 bot.load_extension("Cogs.Outside")
 bot.load_extension("Cogs.CTFtime")
-# bot.load_extension("Cogs.CTFother")
+bot.load_extension("Cogs.CTFother")
 
 
 async def get_servers():
