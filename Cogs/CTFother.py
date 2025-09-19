@@ -9,6 +9,8 @@ from disnake.ui import Modal, StringSelect, TextInput, View
 
 from Modules.Logger import Logger
 
+# global ctf_end_time
+
 
 # Create a separate view for the select component
 class CTFSelectView(disnake.ui.View):
@@ -118,6 +120,8 @@ class CTFModal(disnake.ui.Modal):
                         "❌ End time must be after start time.", ephemeral=True
                     )
                     return
+                global ctf_end_time
+                ctf_end_time = end_time
             except ValueError:
                 await inter.response.send_message(
                     "❌ Invalid date format. Please use YYYY-MM-DD HH:MM (UTC).",
@@ -344,7 +348,6 @@ class CTFSheet(commands.Cog):
         guild: disnake.Guild, channel_name: str, allowed_role: disnake.Role
     ):
         """Create a private text channel for the CTF with restricted access."""
-        """Create a private text channel for the CTF."""
         # Define permission overwrites for the @everyone role
         everyone_overwrite = disnake.PermissionOverwrite(view_channel=False)
 
@@ -369,7 +372,10 @@ class CTFSheet(commands.Cog):
         # Create the text channel
         try:
             new_channel = await guild.create_text_channel(
-                name=channel_name, overwrites=overwrites
+                name=channel_name,
+                overwrites=overwrites,
+                position=1,
+                category=1382763557816500226,
             )
             print(
                 f"Created private channel: {new_channel.name} with access for {allowed_role.name if allowed_role else 'no specific role'}"
@@ -390,15 +396,16 @@ class CTFSheet(commands.Cog):
             guild: The Discord guild to create the channel in
             channel_name: Name of the forum channel
             tags: List of tag dictionaries with 'name' and optionally 'emoji' keys
-                Example: [{"name": "Bug Report", "emoji": "🐛"}, {"name": "Feature Request"}]
             perms: Dictionary mapping role IDs/role objects to permission overwrites
-                Example: {guild.default_role: PermissionOverwrite(view_channel=False)}
         """
 
         try:
             # Create the forum channel first
             forum_channel = await guild.create_forum_channel(
-                name=channel_name, overwrites=perms
+                name=channel_name,
+                overwrites=perms,
+                position=1,
+                category=1382763557816500226,
             )
 
             # Create forum tags
@@ -432,6 +439,51 @@ class CTFSheet(commands.Cog):
         except disnake.HTTPException as e:
             print(f"Error creating forum channel: {e}")
             return None
+
+    # TODO: make it auto detect threads in a specific channel and if it is similar to the ctf name, then check for any messages in the thread, and whoever the author of those messages are, give them the role.
+    @commands.Cog.listener()
+    async def auto_assign_role(self, thread: disnake.Thread):
+        """Auto-assign CTF role based on thread name."""
+        try:
+            # Check if the thread is in the designated channel (replace with your channel ID)
+            designated_channel_id = 1382763557640470615
+            if thread.parent_id != designated_channel_id:
+                return
+
+            # Check if the thread is recent
+            # just check if it's been made in the past week and contains the ctf name
+            if (datetime.datetime.utcnow() - thread.created_at).days > 7:
+                return
+            ctf_name = thread.name.split(" - ")[0].strip()
+
+            # Find the corresponding role in the guild
+            role = disnake.utils.get(thread.guild.roles, name=ctf_name)
+            if not role:
+                print(f"No role found for CTF: {ctf_name}")
+                return
+
+            # Assign the role to all members who have posted in the thread
+            async for message in thread.history(limit=None):
+                member = message.author
+                if isinstance(member, disnake.Member) and role not in member.roles:
+                    await member.add_roles(role)
+                    print(f"Assigned role '{role.name}' to {member.display_name}")
+
+        except Exception as e:
+            print(f"Error in auto_assign_role: {e}")
+
+    # auto move the forum and channel to a different category if the ctf has ended (which we CAN CHECK BY THE END TIME VARIABLE)
+    @commands.Cog.listener()
+    async def on_thread_update(self, before: disnake.Thread, after: disnake.Thread):
+        if before.archived != after.archived and after.archived:
+            # Check if the thread is archived
+            end_time = ctf_end_time
+            if end_time and end_time < datetime.datetime.utcnow():
+                # Move the thread to the "Ended" category
+                ended_category = disnake.utils.get(after.guild.categories, name="Ended")
+                if ended_category:
+                    await after.edit(category=ended_category)
+                    print(f"Moved thread '{after.name}' to 'Ended' category")
 
 
 def setup(bot):
