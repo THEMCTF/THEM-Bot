@@ -12,6 +12,8 @@ from Modules.Logger import Logger
 
 # Create a separate view for the select component
 class CTFSelectView(disnake.ui.View):
+    """View containing the select dropdown for CTF challenge types."""
+
     def __init__(self):
         super().__init__(timeout=300)  # 5 minute timeout
 
@@ -29,6 +31,7 @@ class CTFSelectView(disnake.ui.View):
         ],
     )
     async def select_callback(self, select, interaction):
+        """Handle selection of CTF challenge types."""
         # Store the selected values for later use
         self.selected_types = select.values
 
@@ -39,7 +42,10 @@ class CTFSelectView(disnake.ui.View):
 
 # Subclassing the modal - modals can only contain TextInput components
 class CTFModal(disnake.ui.Modal):
+    """Modal form for CTF registration details."""
+
     def __init__(self, selected_types=None):
+        """Initialize modal with selected challenge types."""
         self.selected_types = selected_types or []
 
         components = [
@@ -73,28 +79,12 @@ class CTFModal(disnake.ui.Modal):
                 max_length=200,
             ),
             TextInput(
-                label="Discord Server (invite link or server name)",
-                custom_id="discord",
-                style=disnake.TextInputStyle.short,
-                required=False,
-                placeholder="https://discord.gg/...",
-                max_length=200,
-            ),
-            TextInput(
                 label="Website URL",
                 custom_id="website",
                 style=disnake.TextInputStyle.short,
                 required=False,
                 placeholder="https://ctf.example.com",
                 max_length=200,
-            ),
-            TextInput(
-                label="Additional Notes",
-                custom_id="notes",
-                style=disnake.TextInputStyle.paragraph,
-                required=False,
-                placeholder="Any additional information about the CTF...",
-                max_length=1000,
             ),
         ]
 
@@ -105,16 +95,17 @@ class CTFModal(disnake.ui.Modal):
         )
 
     async def callback(self, inter: disnake.ModalInteraction):
+        """Process the submitted CTF registration form."""
         try:
             # Get values from the modal
-            ctf_name = (
-                inter.text_values.get("name", "")
-                .strip()
-                .append(datetime.datetime.now().year)
-            )
-            # format the start and end to unix time
+            ctf_name_input = inter.text_values.get("name", "").strip()
+            current_year = datetime.datetime.now().year
+            ctf_name = f"{ctf_name_input} {current_year}"
+
+            # Format the start and end to unix time
             start_str = inter.text_values.get("start", "").strip()
             end_str = inter.text_values.get("end", "").strip()
+
             try:
                 start_time = int(
                     datetime.datetime.strptime(start_str, "%Y-%m-%d %H:%M").timestamp()
@@ -122,15 +113,20 @@ class CTFModal(disnake.ui.Modal):
                 end_time = int(
                     datetime.datetime.strptime(end_str, "%Y-%m-%d %H:%M").timestamp()
                 )
-            await inter.response.send_message(
+                if end_time <= start_time:
+                    await inter.response.send_message(
+                        "❌ End time must be after start time.", ephemeral=True
+                    )
+                    return
+            except ValueError:
+                await inter.response.send_message(
                     "❌ Invalid date format. Please use YYYY-MM-DD HH:MM (UTC).",
                     ephemeral=True,
                 )
+                return
 
             more_cats = inter.text_values.get("cats", "").strip()
-            discord_server = inter.text_values.get("discord", "").strip()
             website = inter.text_values.get("website", "").strip()
-            notes = inter.text_values.get("notes", "").strip()
 
             # Process additional categories
             additional_categories = (
@@ -149,6 +145,12 @@ class CTFModal(disnake.ui.Modal):
                 timestamp=inter.created_at,
             )
 
+            # Add time fields
+            embed.add_field(
+                name="⏰ Start Time", value=f"<t:{start_time}:F>", inline=True
+            )
+            embed.add_field(name="⏰ End Time", value=f"<t:{end_time}:F>", inline=True)
+
             # Add fields to embed
             if all_categories:
                 embed.add_field(
@@ -157,21 +159,13 @@ class CTFModal(disnake.ui.Modal):
                     inline=False,
                 )
 
-            if discord_server:
-                embed.add_field(
-                    name="💬 Discord Server", value=discord_server, inline=True
-                )
-
             if website:
                 embed.add_field(name="🌐 Website", value=website, inline=True)
-
-            if notes:
-                embed.add_field(name="📝 Additional Notes", value=notes, inline=False)
 
             embed.set_footer(text=f"Registered by {inter.author.display_name}")
 
             try:
-                await CTFSheet.make_role(name=ctf_name)
+                await CTFSheet.make_role(inter.guild, name=ctf_name)
                 await CTFSheet.make_ctf_channel(
                     guild=inter.guild,
                     channel_name=ctf_name.lower().replace(" ", "-"),
@@ -179,16 +173,20 @@ class CTFModal(disnake.ui.Modal):
                 )
                 await CTFSheet.make_forum_channel(
                     guild=inter.guild,
-                    channel_name=f"{ctf_name}",
-                    tags=[", ".join(f"`{cat}`" for cat in all_categories)],
+                    channel_name=f"{ctf_name}-forum",
+                    tags=[{"name": cat} for cat in all_categories],
                     perms={
+                        inter.guild.default_role: disnake.PermissionOverwrite(
+                            view_channel=False
+                        ),
                         disnake.utils.get(
                             inter.guild.roles, name=ctf_name
-                        ): disnake.PermissionOverwrite(view_channel=True)
+                        ): disnake.PermissionOverwrite(view_channel=True),
                     },
                 )
             except Exception as e:
                 print(f"Error creating role/channel/forum: {e}")
+
             await inter.response.send_message(embed=embed, ephemeral=True)
 
             # Log the CTF registration (assuming Logger is properly set up)
@@ -208,12 +206,20 @@ class CTFModal(disnake.ui.Modal):
 
 
 class CTFSheet(commands.Cog):
+    """Main cog for CTF management commands."""
+
     def __init__(self, bot):
+        """Initialize the CTF cog."""
         self.bot = bot
 
     # --- Slash Commands ---
-    @commands.slash_command(name="update", description="update the google sheet.")
+    @commands.slash_command(
+        name="update",
+        description="update the google sheet.",
+        default_member_permissions=disnake.Permissions(moderate_members=True),
+    )
     async def update(self, inter: disnake.ApplicationCommandInteraction):
+        """Update the Google sheet by running the external script."""
         await inter.response.defer(
             with_message="Running, this might take a second", ephemeral=False
         )
@@ -221,7 +227,7 @@ class CTFSheet(commands.Cog):
         try:
             # Save current directory
             original_dir = os.getcwd()
-            os.chdir("/Users/starry/Desktop/Code/THEMc/Project-Onjer")
+            os.chdir("../Project-Onjer")
 
             try:
                 process = subprocess.run(
@@ -264,10 +270,12 @@ class CTFSheet(commands.Cog):
         )
 
     @commands.slash_command(
-        name="register_ctf", description="Register a new CTF competition"
+        name="register_ctf",
+        description="Register a new CTF competition",
+        default_member_permissions=disnake.Permissions(moderate_members=True),
     )
     async def register_ctf(self, inter: disnake.ApplicationCommandInteraction):
-        """Command to start CTF registration process"""
+        """Start the CTF registration process with challenge type selection."""
         view = CTFSelectView()
 
         embed = disnake.Embed(
@@ -278,96 +286,100 @@ class CTFSheet(commands.Cog):
 
         await inter.response.send_message(embed=embed, view=view, ephemeral=True)
 
+    @staticmethod
     async def make_role(
-        inter: disnake.ApplicationCommandInteraction,
+        guild: disnake.Guild,
         name: str,
         color: disnake.Color = disnake.Color.default(),
         hoist: bool = False,
         mentionable: bool = False,
         permissions: disnake.Permissions = disnake.Permissions.none(),
     ):
+        """Create a new role in the specified guild with given parameters."""
         """
         Creates a new role in the server.
 
         Parameters
         ----------
+        guild: The guild to create the role in.
         name: The name of the role.
         color: The color of the role (optional, defaults to default color).
         hoist: Whether the role should be displayed separately in the member list (optional, defaults to False).
         mentionable: Whether the role can be mentioned by anyone (optional, defaults to False).
         permissions: The permissions for the role (optional, defaults to no permissions).
         """
-        target_role = 1382763556642099242
-        if inter.author.guild_permissions.manage_roles:
-            try:
-                # Get the position of the target role
-                target_role_position = target_role.position
+        try:
+            # Get the target role by ID
+            target_role = guild.get_role(1382763556642099242)
 
+            if target_role:
                 # Calculate the position for the new role (one less than the target role)
-                new_role_position = target_role_position - 1
+                new_role_position = target_role.position - 1
+            else:
+                new_role_position = 1
 
-                await inter.response.send_message(
-                    f"Created role '{new_role.name}' below '{target_role.name}'."
-                )
-                new_role = await inter.guild.create_role(
-                    name=name,
-                    color=color,
-                    hoist=hoist,
-                    mentionable=mentionable,
-                    permissions=permissions,
-                    position=new_role_position,
-                )
-                await inter.response.send_message(
-                    f"Role '{new_role.name}' created successfully!"
-                )
-            except disnake.Forbidden:
-                await inter.response.send_message(
-                    "I don't have permission to create roles.", ephemeral=True
-                )
-            except Exception as e:
-                await inter.response.send_message(
-                    f"An error occurred: {e}", ephemeral=True
-                )
-        else:
-            await inter.response.send_message(
-                "You don't have permission to create roles.", ephemeral=True
+            new_role = await guild.create_role(
+                name=name,
+                color=color,
+                hoist=hoist,
+                mentionable=mentionable,
+                permissions=permissions,
             )
 
+            # Move the role to the desired position
+            await new_role.edit(position=new_role_position)
+
+            print(f"Created role '{new_role.name}' successfully!")
+            return new_role
+
+        except disnake.Forbidden:
+            print("Bot doesn't have permission to create roles.")
+            return None
+        except Exception as e:
+            print(f"An error occurred creating role: {e}")
+            return None
+
+    @staticmethod
     async def make_ctf_channel(
         guild: disnake.Guild, channel_name: str, allowed_role: disnake.Role
     ):
-        # 1. Define permission overwrites for the @everyone role
+        """Create a private text channel for the CTF with restricted access."""
+        """Create a private text channel for the CTF."""
+        # Define permission overwrites for the @everyone role
         everyone_overwrite = disnake.PermissionOverwrite(view_channel=False)
 
-        # 2. Define permission overwrites for roles that should have access
+        # Define permission overwrites for roles that should have access
         allowed_role_overwrite = disnake.PermissionOverwrite(view_channel=True)
 
-        # 3. Get the other role by ID
+        # Get the other role by ID
         other_role = guild.get_role(1382763556792963102)
 
-        # 4. Create overwrites dictionary
+        # Create overwrites dictionary
         overwrites = {
             guild.default_role: everyone_overwrite,
-            allowed_role: allowed_role_overwrite,
         }
+
+        if allowed_role:
+            overwrites[allowed_role] = allowed_role_overwrite
 
         # Add the other role if it exists
         if other_role:
             overwrites[other_role] = allowed_role_overwrite
 
-        # 5. Create the text channel
+        # Create the text channel
         try:
             new_channel = await guild.create_text_channel(
                 name=channel_name, overwrites=overwrites
             )
             print(
-                f"Created private channel: {new_channel.name} with access for {allowed_role.name}"
+                f"Created private channel: {new_channel.name} with access for {allowed_role.name if allowed_role else 'no specific role'}"
             )
             return new_channel
         except disnake.HTTPException as e:
             print(f"Error creating channel: {e}")
             return None
 
+    @staticmethod
     async def make_forum_channel(
         guild: disnake.Guild, channel_name: str, tags: list[dict], perms: dict
     ):
@@ -392,8 +404,13 @@ class CTFSheet(commands.Cog):
             # Create forum tags
             forum_tags = []
             for tag_data in tags:
-                tag_name = tag_data.get("name")
-                tag_emoji = tag_data.get("emoji")
+                if isinstance(tag_data, dict):
+                    tag_name = tag_data.get("name")
+                    tag_emoji = tag_data.get("emoji")
+                else:
+                    # Handle case where tag_data might be a string
+                    tag_name = str(tag_data)
+                    tag_emoji = None
 
                 if tag_name:
                     # Create ForumTag object

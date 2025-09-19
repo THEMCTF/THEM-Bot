@@ -1,5 +1,6 @@
 # import json
 
+import os
 import time
 
 import disnake
@@ -24,6 +25,14 @@ class GeneralCog(commands.Cog):
             user=inter.author,
         )
 
+    @commands.slash_command(name="changelog", description="get the recent changes")
+    async def changelong(self, inter: disnake.ApplicationCommandInteraction):
+        await inter.response.send_message(
+            "```md\n"
+            + open(os.path.join(os.path.dirname(__file__), "../changelog.md")).read()
+            + "\n```"
+        )
+
     @commands.slash_command(name="gif", description="gif.")
     async def gif(self, inter: disnake.ApplicationCommandInteraction):
         await inter.response.send_message(
@@ -41,7 +50,7 @@ class GeneralCog(commands.Cog):
     async def source(self, inter: disnake.ApplicationCommandInteraction):
         await inter.response.send_message("https://github.com/THEMCTF/THEM-Bot")
 
-    @log()
+    # @log() # fucking hell
     @commands.slash_command(name="help", description="List all slash commands.")
     async def help_slash(self, inter: disnake.ApplicationCommandInteraction):
         help_text = "Available slash commands:\n"
