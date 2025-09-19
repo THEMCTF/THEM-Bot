@@ -472,18 +472,46 @@ class CTFSheet(commands.Cog):
         except Exception as e:
             print(f"Error in auto_assign_role: {e}")
 
-    # auto move the forum and channel to a different category if the ctf has ended (which we CAN CHECK BY THE END TIME VARIABLE)
     @commands.Cog.listener()
     async def on_thread_update(self, before: disnake.Thread, after: disnake.Thread):
-        if before.archived != after.archived and after.archived:
-            # Check if the thread is archived
-            end_time = ctf_end_time
-            if end_time and end_time < datetime.datetime.utcnow():
-                # Move the thread to the "Ended" category
-                ended_category = disnake.utils.get(after.guild.categories, name="Ended")
+        """Move forum and channel to 'Archive' category if the CTF has ended."""
+        # Check if the thread was just closed
+        if before.archived == False and after.archived == True:
+            return  # We only care about threads being archived
+
+        # Check if the CTF has ended
+        ctf_end_time = getattr(after, "ctf_end_time", None)
+        if ctf_end_time and ctf_end_time < datetime.datetime.utcnow():
+            text_channel = disnake.utils.get(
+                after.guild.text_channels, name=after.name.lower().replace(" - ", "-")
+            )
+            if text_channel:
+                ended_category = disnake.utils.get(
+                    after.guild.categories, id=1385002767382347776
+                )
                 if ended_category:
-                    await after.edit(category=ended_category)
-                    print(f"Moved thread '{after.name}' to 'Ended' category")
+                    # also make it so the text channel is position 0 and the forum is position 1
+                    await text_channel.edit(category=ended_category)
+                    print(f"Moved channel '{text_channel.name}' to 'Archive' category")
+            # get the forum channel
+            forum_channel = disnake.utils.get(
+                after.guild.forum_channels,
+                name=after.name.lower().replace(" - ", "-") + "-forum",
+            )
+            if forum_channel:
+                ended_category = disnake.utils.get(
+                    after.guild.categories, id=1385002767382347776
+                )
+                if ended_category:
+                    # also make it so the text channel is position 0 and the forum is position 1
+                    await forum_channel.edit(category=ended_category)
+                    print(f"Moved forum '{forum_channel.name}' to 'Archive' category")
+            await text_channel.set_permissions(
+                after.guild.default_role, view_channel=True
+            )
+            await forum_channel.set_permissions(
+                after.guild.default_role, view_channel=True
+            )
 
 
 def setup(bot):

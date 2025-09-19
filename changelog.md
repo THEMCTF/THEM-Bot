@@ -7,3 +7,6 @@
 - Added caching for Google Sheets data
 - Fixed /update command to refresh Google Sheets data (Made it so only mods can run it)
 - Added /changelog command to display recent changes
+- Added auto role assignment for CTF threads
+- Implemented archiving of CTF threads and channels
+- Improved error handling and logging
