@@ -7,6 +7,7 @@ from disnake import TextInputStyle
 from disnake.ext import commands
 from disnake.ui import Modal, StringSelect, TextInput, View
 
+from Modules import log
 from Modules.Logger import Logger
 
 # global ctf_end_time
@@ -217,11 +218,15 @@ class CTFSheet(commands.Cog):
         self.bot = bot
 
     # --- Slash Commands ---
+    @log(text="Update command was used", color=0x00FF00)
     @commands.slash_command(
         name="update",
         description="update the google sheet.",
         default_member_permissions=disnake.Permissions(moderate_members=True),
     )
+    @commands.cooldown(
+        1, 300, commands.BucketType.guild
+    )  # 1 use per 5 minutes per server
     async def update(self, inter: disnake.ApplicationCommandInteraction):
         """Update the Google sheet by running the external script."""
         await inter.response.defer(
@@ -273,11 +278,13 @@ class CTFSheet(commands.Cog):
             user=inter.author,
         )
 
+    @log(text="CTF registration started", color=0x00FF00)
     @commands.slash_command(
         name="register_ctf",
         description="Register a new CTF competition",
         default_member_permissions=disnake.Permissions(moderate_members=True),
     )
+    @commands.cooldown(1, 30, commands.BucketType.user)  # 1 use per 30 seconds per user
     async def register_ctf(self, inter: disnake.ApplicationCommandInteraction):
         """Start the CTF registration process with challenge type selection."""
         view = CTFSelectView()
@@ -440,7 +447,7 @@ class CTFSheet(commands.Cog):
             print(f"Error creating forum channel: {e}")
             return None
 
-    # TODO: make it auto detect threads in a specific channel and if it is similar to the ctf name, then check for any messages in the thread, and whoever the author of those messages are, give them the role.
+    # TODO: actually just make it send a button in the channel that will check if users have one of the roles that in defined in the config.yml, and only send this button after a ctf has been registered and a message was sent in annoucments containing that ctf name, make it have a cooldown of a day. Also make a backup prefix command that can only be used by user ids definded in the config that will send the button.
     @commands.Cog.listener()
     async def auto_assign_role(self, thread: disnake.Thread):
         """Auto-assign CTF role based on thread name."""

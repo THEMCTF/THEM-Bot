@@ -1,0 +1,39 @@
+# Bot configuration file
+guild_id: 1382763556642099240
+announcements: 1382763557816500227
+
+# Channel restrictions
+restricted_channels:
+  - 1382763557640470615  # announcements
+  - 1389155950002311219  # tip of the day
+  - 1399381088920670281  # ctf diary
+  - 1392137727759089817  # hall of fame
+  - 1382763557816500225  # welcome
+  - 1382765163484155904  # rules
+  - 1389327426538049677  # chal tryouts
+  - 1385022337715277955  # apply for member
+  - 1385340123406930081  # transcripts
+  - 1382763558000918577  # mod logs
+
+# Logging configuration
+logging_channel: 1382763558000918577
+enable_channel_logging: true
+
+# Rate limiting (in seconds)
+cooldowns:
+  default: 60  # Default cooldown if not specified
+  General:
+    help: 30
+    ping: 10
+  Moderation:
+    warn: 5
+    kick: 0  # No cooldown for moderation commands
+    ban: 0
+  CTFtime:
+    default: 120  # Default for all CTFtime commands
+    upcoming: 300  # Specific override for upcoming command
+  CTFother:
+    default: 30
+  Responder:
+    default: 15
+    dm_logs: 60

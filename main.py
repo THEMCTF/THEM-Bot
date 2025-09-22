@@ -1,7 +1,9 @@
+import asyncio
 import os
+import time
 
 import disnake
-import json5
+import yaml
 from disnake.ext import commands
 from dotenv import load_dotenv
 
@@ -17,29 +19,59 @@ TOKEN = os.getenv("TOKEN")
 # Get the directory of the current script
 current_dir = os.path.dirname(os.path.abspath(__file__))
 
-# Join with config.json5
-config_path = os.path.join(current_dir, "config.json5")
+# Join with config.yml
+config_path = os.path.join(current_dir, "config.yml")
 
 # Normalize the path (resolves "..")
 config_path = os.path.normpath(config_path)
 
 with open(config_path, "r") as f:
-    data = json5.load(f)
-    GUILD_ID = data.get("GUILD_ID", [])
+    data = yaml.safe_load(f)
+    GUILD_ID = data.get("guild_id")
 
+
+from Modules.Database import Database
 
 # Create the bot without a command prefix since we're using ONLY slash commands.
 bot = commands.InteractionBot(intents=disnake.Intents.all())
+bot.launch_time = time.time()  # Track when the bot started
 
-setup_logger(bot)
 
-# Load cogs (ensure these .py files exist in your bot's folder).
-bot.load_extension("Cogs.General")  # General commands
-bot.load_extension("Cogs.Responder")  # Responder duh
-bot.load_extension("Cogs.Moderation")
-bot.load_extension("Cogs.Outside")
-bot.load_extension("Cogs.CTFtime")
-bot.load_extension("Cogs.CTFother")
+# Initialize database before loading cogs
+async def init_database():
+    print("Initializing database connection...")
+    try:
+        await Database.init()
+        print("Database initialized successfully")
+    except Exception as e:
+        print(f"Error initializing database: {e}")
+        raise  # Re-raise to prevent bot startup with broken database
+
+
+# Create event loop to initialize database
+loop = asyncio.get_event_loop()
+loop.run_until_complete(init_database())
+
+
+# Load cogs in parallel for faster startup
+async def load_cogs():
+    cogs = [
+        "Cogs.General",  # General commands
+        "Cogs.Responder",  # Responder
+        "Cogs.Moderation",
+        "Cogs.CTFtime",
+        "Cogs.CTFother",
+        "Cogs.ChangelogMonitor",  # Changelog monitoring and notifications
+    ]
+    for cog in cogs:
+        try:
+            bot.load_extension(cog)
+        except Exception as e:
+            print(f"Failed to load extension {cog}: {e}")
+
+
+# Load cogs
+loop.run_until_complete(load_cogs())
 
 
 async def get_servers():
@@ -73,18 +105,35 @@ async def get_servers():
 
 
 @bot.event
-async def on_ready():  # TODO: FIX
-    # List all application commands
-    # help_text = f"\033[34mAvailable slash commands:\n"
-    # for cmd in bot.application_commands:
-    #     help_text += f"/{cmd.name}: {cmd.description}\n"
-    # print(help_text)
+async def on_ready():
+    startup_time = time.time() - bot.launch_time
 
-    # List all loaded cogs
-    print("\033[32mCogs loaded:", list(bot.cogs.keys()))
+    # Initialize logger first thing
+    logger = await setup_logger(bot)
 
-    print(f"\033[32mBot is ready and logged in as {bot.user}\033[0m")
-    # await get_servers()
+    # Build status message
+    status_parts = [
+        f"Loaded cogs: {', '.join(bot.cogs.keys())}",
+        f"Startup time: {startup_time:.2f}s",
+        f"Connected as: {bot.user}",
+    ]
+    status = "\n".join(status_parts)
+
+    # Log to console with color
+    print(f"\033[32m{status}\033[0m")
+
+    # Log to Discord if logger is available
+    if logger:
+        try:
+            await logger.log(
+                text=f"Bot is online! Startup took {startup_time:.2f}s",
+                color=0x00FF00,
+                type="Startup",
+                priority=1,
+                user=bot.user,
+            )
+        except Exception as e:
+            print(f"Failed to send startup log: {e}")
 
 
 # Run the bot and monitor the file concurrently

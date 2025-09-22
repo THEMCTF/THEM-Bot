@@ -5,22 +5,25 @@ import re
 import time
 
 import disnake
-import json5
+import yaml
 from disnake.ext import commands
+
+from Modules import log
+from Modules.Database import Database
 
 # Get the directory of the current script
 current_dir = os.path.dirname(os.path.abspath(__file__))
 
-# Go one folder up and join with config.json5
-config_path = os.path.join(current_dir, "..", "config.json5")
+# Go one folder up and join with config.yml
+config_path = os.path.join(current_dir, "..", "config.yml")
 
 # Normalize the path (resolves "..")
 config_path = os.path.normpath(config_path)
 
 with open(config_path, "r") as f:
-    data = json5.load(f)
-    RESTRICTED = data.get("RESTRICTED", [])
-    COOLDOWN = int(data.get("COOLDOWN", []))
+    data = yaml.safe_load(f)
+    RESTRICTED = data.get("restricted_channels", [])
+    COOLDOWN = int(data.get("cooldown", 60))
 
 
 class MessageResponder(commands.Cog):
@@ -89,110 +92,19 @@ class MessageResponder(commands.Cog):
                         embed.set_thumbnail(url=user.avatar.url)
                     await message.reply(embed=embed)
 
-        def log_dm_to_file(self, user, content, message):
-            """Log DM to a JSON5 file with proper formatting"""
-            log_entry = {
-                "timestamp": datetime.datetime.now().isoformat(),
-                "user_id": user.id,
-                "username": f"{user.name}#{user.discriminator}",
-                "content": content,
-                "message_id": message.id,
-                "has_attachments": len(message.attachments) > 0,
-                "attachment_count": len(message.attachments),
-            }
-            print(log_entry)
-
-            log_file = "dm_logs.json5"
-
+        async def log_dm(self, user, content, message):
+            """Log DM to database"""
             try:
-                # Check if file exists and has content
-                if os.path.exists(log_file) and os.path.getsize(log_file) > 0:
-                    # File exists with content - need to insert into array
-                    with open(log_file, "r+", encoding="utf-8") as f:
-                        # Read the file and find the last ]
-                        content = f.read()
-                        if content.strip().endswith("]"):
-                            # Remove the closing bracket
-                            f.seek(0)
-                            f.truncate()
-                            # Write everything except the last ]
-                            f.write(content.rstrip().rstrip("]").rstrip())
-                            # Add comma and new entry with proper formatting
-                            f.write(",\n  {\n")
-                            f.write(f'    "timestamp": "{log_entry["timestamp"]}",\n')
-                            f.write(f'    "user_id": {log_entry["user_id"]},\n')
-                            f.write(f'    "username": "{log_entry["username"]}",\n')
-                            f.write(
-                                f'    "content": {json5.dumps(log_entry["content"])},\n'
-                            )
-                            f.write(f'    "message_id": {log_entry["message_id"]},\n')
-                            f.write(
-                                f'    "has_attachments": {str(log_entry["has_attachments"]).lower()},\n'
-                            )
-                            f.write(
-                                f'    "attachment_count": {log_entry["attachment_count"]}\n'
-                            )
-                            f.write("  }\n]")
-                        else:
-                            # File is malformed, start fresh
-                            f.seek(0)
-                            f.truncate()
-                            f.write("[\n  {\n")
-                            f.write(f'    "timestamp": "{log_entry["timestamp"]}",\n')
-                            f.write(f'    "user_id": {log_entry["user_id"]},\n')
-                            f.write(f'    "username": "{log_entry["username"]}",\n')
-                            f.write(
-                                f'    "content": {json5.dumps(log_entry["content"])},\n'
-                            )
-                            f.write(f'    "message_id": {log_entry["message_id"]},\n')
-                            f.write(
-                                f'    "has_attachments": {str(log_entry["has_attachments"]).lower()},\n'
-                            )
-                            f.write(
-                                f'    "attachment_count": {log_entry["attachment_count"]}\n'
-                            )
-                            f.write("  }\n]")
-                else:
-                    # File doesn't exist or is empty - create new array
-                    with open(log_file, "w", encoding="utf-8") as f:
-                        f.write("[\n  {\n")
-                        f.write(f'    "timestamp": "{log_entry["timestamp"]}",\n')
-                        f.write(f'    "user_id": {log_entry["user_id"]},\n')
-                        f.write(f'    "username": "{log_entry["username"]}",\n')
-                        f.write(
-                            f'    "content": {json5.dumps(log_entry["content"])},\n'
-                        )
-                        f.write(f'    "message_id": {log_entry["message_id"]},\n')
-                        f.write(
-                            f'    "has_attachments": {str(log_entry["has_attachments"]).lower()},\n'
-                        )
-                        f.write(
-                            f'    "attachment_count": {log_entry["attachment_count"]}\n'
-                        )
-                        f.write("  }\n]")
-
+                await Database.log_dm(
+                    user_id=user.id,
+                    username=str(user),
+                    content=content,
+                    message_id=message.id,
+                    has_attachments=bool(message.attachments),
+                    attachment_count=len(message.attachments),
+                )
             except Exception as e:
-                print(f"Failed to log DM: {e}")
-                # Fallback: create new file
-                try:
-                    with open(log_file, "w", encoding="utf-8") as f:
-                        f.write("[\n  {\n")
-                        f.write(f'    "timestamp": "{log_entry["timestamp"]}",\n')
-                        f.write(f'    "user_id": {log_entry["user_id"]},\n')
-                        f.write(f'    "username": "{log_entry["username"]}",\n')
-                        f.write(
-                            f'    "content": {json5.dumps(log_entry["content"])},\n'
-                        )
-                        f.write(f'    "message_id": {log_entry["message_id"]},\n')
-                        f.write(
-                            f'    "has_attachments": {str(log_entry["has_attachments"]).lower()},\n'
-                        )
-                        f.write(
-                            f'    "attachment_count": {log_entry["attachment_count"]}\n'
-                        )
-                        f.write("  }\n]")
-                except Exception as e2:
-                    print(f"Failed to create new log file: {e2}")
+                print(f"Failed to log DM to database: {e}")
 
         # Command to send DM to a user (admin only)
         @commands.slash_command(name="starry", description="ALSO TESTING")
@@ -204,9 +116,6 @@ class MessageResponder(commands.Cog):
             example: str,
         ):
             """Send a DM to a specific user"""
-            if inter.author.id != 733839959009525761:
-                await inter.response.send_message("no")
-                return
             try:
                 await user.send(example)
                 await inter.response.send_message(
@@ -223,61 +132,55 @@ class MessageResponder(commands.Cog):
                 )
 
         # Command to get recent DM logs (admin only)
-        @commands.slash_command(name="pavel", description="this is testing")
+        @log(text="DM logs command was used", color=0x00FF00)
+        @commands.slash_command(
+            name="dm_logs",
+            description="View recent DM logs",
+            default_member_permissions=disnake.Permissions(administrator=True),
+        )
         async def dm_logs(
-            self, inter: disnake.ApplicationCommandInteraction, limit: int = 10
+            self,
+            inter: disnake.ApplicationCommandInteraction,
+            limit: int = commands.Param(
+                description="Number of logs to show", default=10
+            ),
         ):
             """View recent DM logs"""
-            if inter.author.id != 733839959009525761:
-                await inter.response.send_message("no")
+            if inter.author.id != 733839959009525761:  # Keep the owner check
+                await inter.response.send_message("no", ephemeral=True)
                 return
-            try:
-                with open("dm_logs.json", "r", encoding="utf-8") as f:
-                    lines = f.readlines()
 
-                if not lines:
-                    await inter.response.send_message(
-                        "❌ No DM logs found", ephemeral=True
-                    )
+            await inter.response.defer(ephemeral=True)
+
+            try:
+                logs = await Database.get_recent_dms(limit)
+
+                if not logs:
+                    await inter.followup.send("❌ No DM logs found", ephemeral=True)
                     return
 
-                # Get the last N lines
-                recent_logs = lines[-limit:]
-
                 embed = disnake.Embed(
-                    title=f"📬 Recent DM Logs ({len(recent_logs)} messages)",
+                    title=f"📬 Recent DM Logs ({len(logs)} messages)",
                     color=disnake.Color.blue(),
                 )
 
                 log_text = []
-                for line in recent_logs:
-                    try:
-                        log_entry = json5.loads(line.strip())
-                        timestamp = datetime.datetime.fromisoformat(
-                            log_entry["timestamp"]
-                        )
-                        time_str = timestamp.strftime("%m/%d %H:%M")
-                        content_preview = log_entry["content"][:50] + (
-                            "..." if len(log_entry["content"]) > 50 else ""
-                        )
+                for log in logs:
+                    time_str = log["timestamp"].strftime("%m/%d %H:%M")
+                    content_preview = log["content"][:50] + (
+                        "..." if len(log["content"]) > 50 else ""
+                    )
+                    attachments = " 📎" if log["has_attachments"] else ""
 
-                        log_text.append(
-                            f"`{time_str}` **{log_entry['username']}**: {content_preview}"
-                        )
-                    except:
-                        continue
+                    log_text.append(
+                        f"`{time_str}` **{log['username']}**:{attachments} {content_preview}"
+                    )
 
-                embed.description = (
-                    "\n".join(log_text) if log_text else "No valid logs found"
-                )
-                await inter.response.send_message(embed=embed, ephemeral=True)
+                embed.description = "\n".join(log_text)
+                await inter.followup.send(embed=embed, ephemeral=True)
 
-            except FileNotFoundError:
-                await inter.response.send_message(
-                    "❌ No DM log file found", ephemeral=True
-                )
             except Exception as e:
-                await inter.response.send_message(
+                await inter.followup.send(
                     f"❌ Error reading logs: {str(e)}", ephemeral=True
                 )
 
@@ -286,7 +189,7 @@ class MessageResponder(commands.Cog):
         async def on_message(self, message: disnake.Message):
             return
 
-        # if replying to bot with good bot then heart the message
+        # TODO: if replying to bot and contains "good" then heart the message
 
         @commands.Cog.listener()
         async def on_message(self, message: disnake.Message):
@@ -365,7 +268,7 @@ class MessageResponder(commands.Cog):
                     f"\033[34m{message.author.display_name} triggered THEM response\033[0m"
                 )
                 self.last_trigger_time = time.time()
-                # themCounter += 1 # TODO: make this use a json5 file (cuz fk you i like json5 more then json) -starry
+                # themCounter += 1 # TODO: make this work using postgres
 
             # time.sleep(5)  # commented out to avoid blocking async loop
 

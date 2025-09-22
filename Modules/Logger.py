@@ -6,33 +6,50 @@ from functools import wraps
 from time import time
 
 import disnake
-import json5
+import yaml
 from disnake.ext import commands
 
-# Get the directory of the current script
-current_dir = os.path.dirname(os.path.abspath(__file__))
-# Go one folder up and join with config.json5
-config_path = os.path.join(current_dir, "..", "config.json5")
-# Normalize the path (resolves "..")
-config_path = os.path.normpath(config_path)
+# Initialize defaults
+LOGGING_CHANNEL = None
+ENABLE_CHANNEL_LOGGING = False
+ENABLE_LOG_TO_FILE = False
 
-with open(config_path, "r") as f:
-    data = json5.load(f)  # make this use yml later
 
-LOGGING_CHANNEL = data.get("LOGGING_CHANNEL", [])
-ENABLE_CHANNEL_LOGGING = data.get("ENABLE_CHANNEL_LOGGING", [])
-ENABLE_LOG_TO_FILE = data.get("ENABLE_LOG_TO_FILE", [])
+def load_config():
+    """Load configuration from YAML file"""
+    global LOGGING_CHANNEL, ENABLE_CHANNEL_LOGGING, ENABLE_LOG_TO_FILE
+    try:
+        config_path = os.path.normpath(
+            os.path.join(os.path.dirname(__file__), "..", "config.yml")
+        )
+        with open(config_path, "r") as f:
+            data = yaml.safe_load(f)
+            LOGGING_CHANNEL = data.get("logging_channel")  # Should be an integer
+            ENABLE_CHANNEL_LOGGING = data.get("enable_channel_logging", False)
+            ENABLE_LOG_TO_FILE = data.get("enable_log_to_file", False)
+    except Exception as e:
+        print(f"Error loading logger config: {e}")
+        # Keep default values if loading fails
 
 
 class Logger:
-    def __init__(self, bot, text=None, color=0x00FF00, type="INFO", priority=0):
-        self.bot = bot
-        self.rendition = 0  # this words just sounds cool, it's not really related -starry [9/10/2025]
-        # Default decorator parameters
-        self.default_text = text
-        self.default_color = color
-        self.default_type = type
-        self.default_priority = priority
+    _instance = None
+
+    def __new__(cls, bot=None, **kwargs):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+
+    def __init__(self, bot=None, text=None, color=0x00FF00, type="INFO", priority=0):
+        if not self._initialized and bot:
+            self.bot = bot
+            self.rendition = 0
+            self.default_text = text
+            self.default_color = color
+            self.default_type = type
+            self.default_priority = priority
+            self._initialized = True
 
     async def log(self, text, color, type, priority, user=None):
         """The actual logging method"""
@@ -49,26 +66,25 @@ class Logger:
             }
 
             # Write JSON to file (append mode)
-            log_file = os.path.join(current_dir, "bot_logs.json")
+            log_file = os.path.join(os.path.dirname(__file__), "bot_logs.json")
             try:
-                # Read existing logs if file exists
+                logs = []
                 if os.path.exists(log_file):
                     with open(log_file, "r") as f:
                         try:
-                            logs = json5.load(f)
+                            logs = yaml.safe_load(f) or []
                             if not isinstance(logs, list):
                                 logs = []
-                        except:
+                        except Exception as e:
+                            print(f"Error reading log file: {e}")
                             logs = []
-                else:
-                    logs = []
 
                 # Append new log entry
                 logs.append(log_entry)
 
                 # Write back to file
                 with open(log_file, "w") as f:
-                    json5.dump(logs, f, indent=2)
+                    yaml.safe_dump(logs, f, sort_keys=False, indent=2)
             except Exception as e:
                 print(f"Error writing to log file: {e}")
 
@@ -253,11 +269,19 @@ bot = None
 logger = None
 
 
-def setup_logger(bot_instance):
+async def setup_logger(bot_instance):
     global bot, logger
     bot = bot_instance
     logger = Logger(bot_instance)
     return logger
+
+
+async def log(text, color, type, priority, user):
+    """Logs a message with configurable parameters."""
+    print(
+        f"Logging: {text} with color {color}, type {type}, priority {priority}, and user {user}"
+    )
+    await logger.log(text, color, type, priority, user)
 
 
 # Usage examples:
@@ -266,15 +290,24 @@ def setup_logger(bot_instance):
 # bot = commands.Bot(...)
 # logger = Logger(bot)
 
+
 # Use as decorator with default settings:
-# @logger
-# async def some_command(ctx):
-#     await ctx.send("Hello!")
+# async def setup_logger_with_args(bot_instance):
+#     global bot, logger
+#     bot = bot_instance
+#     logger = Logger(bot_instance)
+#     return logger
 
-# Use as decorator with custom parameters:
-# @logger(text="Custom command executed", color=0xff0000, type="COMMAND", priority=1, log_args=True)
-# async def another_command(ctx, arg1, arg2):
-#     await ctx.send(f"Args: {arg1}, {arg2}")
 
-# Use directly for manual logging:
-# await logger.log("Manual log message", 0x00ff00, "MANUAL", 0, user=ctx.author)
+# async def setup_logger_with_result(bot_instance):
+#     global bot, logger
+#     bot = bot_instance
+#     logger = Logger(bot_instance)
+#     return logger
+
+
+# async def setup_logger_with_args_async(bot_instance):
+#     global bot, logger
+#     bot = bot_instance
+#     logger = Logger(bot_instance)
+#     return logger
