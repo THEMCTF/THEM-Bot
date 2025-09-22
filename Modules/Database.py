@@ -16,7 +16,9 @@ class Database:
     _pool = None
     _instance = None
     conn: asyncpg.Connection = None
-    DATA_DIR = Path(__file__).parent.parent / "data"
+    DATA_DIR = (
+        Path(__file__).parent.parent / "data"
+    )  # For bot data only, not PostgreSQL
 
     def __new__(cls):
         if cls._instance is None:
@@ -34,17 +36,11 @@ class Database:
                 "Windows: https://www.postgresql.org/download/windows/"
             )
 
-        # Ensure data directory exists
+        # Ensure data directory exists for bot data
         cls.DATA_DIR.mkdir(parents=True, exist_ok=True)
-
-        # Initialize PostgreSQL data directory if needed
-        if not (cls.DATA_DIR / "PG_VERSION").exists():
-            cls._init_data_directory()
 
         if not cls._start_postgres_service():
             print("WARNING: Could not automatically start PostgreSQL service")
-
-        print(f"PostgreSQL data directory: {cls.DATA_DIR}")
 
         # Get database credentials from environment variables
         db_user = os.getenv("DB_USER", "themcbot")
@@ -78,20 +74,6 @@ class Database:
             await cls.create_solutions_table()
             await cls.create_counters_table()
 
-    @classmethod
-    def _init_data_directory(cls):
-        """Initialize a new PostgreSQL data directory"""
-        try:
-            subprocess.run(
-                ["initdb", "-D", str(cls.DATA_DIR)],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-        except subprocess.CalledProcessError as e:
-            print(f"Failed to initialize data directory: {e.stderr}")
-            raise
-
     @staticmethod
     def _is_postgres_installed():
         """Check if PostgreSQL is installed."""
@@ -105,21 +87,15 @@ class Database:
 
     @staticmethod
     def _start_postgres_service():
-        """Start PostgreSQL service with custom data directory"""
+        """Start PostgreSQL service using system defaults"""
         system = platform.system()
         try:
             if system == "Darwin":  # macOS
-                subprocess.run(
-                    ["pg_ctl", "-D", str(Database.DATA_DIR), "start"], check=True
-                )
+                subprocess.run(["brew", "services", "start", "postgresql"], check=True)
             elif system == "Linux":
-                subprocess.run(
-                    ["pg_ctl", "-D", str(Database.DATA_DIR), "start"], check=True
-                )
+                subprocess.run(["sudo", "service", "postgresql", "start"], check=True)
             elif system == "Windows":
-                subprocess.run(
-                    ["pg_ctl", "-D", str(Database.DATA_DIR), "start"], check=True
-                )
+                subprocess.run(["net", "start", "postgresql"], check=True)
             return True
         except (subprocess.CalledProcessError, FileNotFoundError):
             return False
@@ -501,6 +477,34 @@ class Database:
             LIMIT 1
         """
         try:
+            timestamp = await cls.conn.fetchval(query)
+            return timestamp if timestamp else datetime.min.replace(tzinfo=timezone.utc)
+        except Exception as e:
+            print(f"Failed to get latest DM timestamp: {e}")
+            return datetime.min.replace(tzinfo=timezone.utc)
+        query = "SELECT value FROM counters WHERE name = 'them_counter'"
+        try:
+            value = await cls.conn.fetchval(query)
+            return value or 0
+        except Exception as e:
+            print(f"Failed to get them counter: {e}")
+            return 0
+
+    @classmethod
+    async def get_latest_dm_timestamp(cls) -> Optional[datetime]:
+        """Get timestamp of the most recent DM in the database"""
+        query = """
+            SELECT timestamp
+            FROM dm_logs
+            ORDER BY timestamp DESC
+            LIMIT 1
+        """
+        try:
+            timestamp = await cls.conn.fetchval(query)
+            return timestamp
+        except Exception as e:
+            print(f"Failed to get latest DM timestamp: {e}")
+            return datetime.min.replace(tzinfo=timezone.utc)
             timestamp = await cls.conn.fetchval(query)
             return timestamp
         except Exception as e:
