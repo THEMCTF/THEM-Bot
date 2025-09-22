@@ -31,18 +31,96 @@ class MessageResponder(commands.Cog):
         r"https?://cdn\.discordapp\.com/attachments/\d+/\d+/\S+\.gif", re.IGNORECASE
     )
 
-    TARGET_GIF_URL = (
+    OLD_GIF_URL = (
         "https://cdn.discordapp.com/attachments/1382763557816500227/1400565040100409405/"
         "5NHcc2CSekZ0u3Cb8cVYKCbvDwGz3O372m9bteYZvljpiaUeyaodrWuuML0UK7iDMWilkUkQJR2Pl1xEaOC86BvHHf2RjbJfjWqOStrVYQnxzXEOkT6QzV9nFE7zTuh1TmUh3B74WN9naNsF4wU2tgLHJQ2DtlCcjCwoWrfdZuVMoUiRMp6ZqlWTK3TeHLUDeWlnXi6CuCmHK67geXDD0zh9B5iOiFWxl5fX6OQBPmLdhRpMpItCjnDuxCeCSlItsk9ZU9RALGfmLPFSTBDcE79OTrKanVNJZFHfF74QFrTq839ZYAeNGoEzBInEaC9dgtrlZ2bF640olzMbOx1XB6G9xmyp0ibkSarknXVGiEVPtgDatFrGbo14uZ1x5lZMXlqheNjbq1Bof3JsaL6PD1MpPsVhir6Cjuns4pJl8yWdBHdWKC1xtzLZSH3nKQXAxzNmy8ZFEKBvE2KowiTjgFid0tngNkt0zho1OZ9NJgk7eA8r7VjFQXiB9D1X..gif"
     )
+    TARGET_GIF_URL = "https://tenor.com/view/them-ctf-scream-scream-if-you-love-them-the-rock-gif-5196550339096611233"
 
     def __init__(self, bot):
         self.bot = bot
         self.last_trigger_time = 0
-        self.them_emoji = str("<:them:1410349269948436530>")
+        self.them_emoji = "<:them:1410349269948436530>"
 
-    class DM_Manager(commands.Cog):
-        def __init__(self):
+    @commands.Cog.listener()
+    async def on_message(self, message: disnake.Message):
+        # Check if message is a reply and contains "good"
+        if (
+            message.reference
+            and "good" in message.content.lower()
+            and not message.author.bot
+        ):
+            try:
+                # Get the message being replied to
+                replied_msg = await message.channel.fetch_message(
+                    message.reference.message_id
+                )
+                # Check if the replied message is from our bot
+                if replied_msg.author.id == self.bot.user.id:
+                    await message.add_reaction("❤️")
+            except (disnake.NotFound, disnake.Forbidden):
+                pass
+
+        # Return if message is from a bot or in restricted channel or DM
+        if (
+            message.author.bot
+            or message.channel.id in RESTRICTED
+            or isinstance(message.channel, disnake.DMChannel)
+        ):
+            return
+
+        content = message.content or ""
+
+        # Check if message contains "them" keyword (case insensitive)
+        has_keyword = any(
+            keyword in content.lower() for keyword in ["them", self.them_emoji]
+        )
+
+        # Check for exact target GIF URL
+        has_exact_gif_url = (
+            self.TARGET_GIF_URL in content
+            or any(
+                embed.image
+                and isinstance(embed.image.url, str)
+                and embed.image.url == self.TARGET_GIF_URL
+                for embed in message.embeds
+            )
+            or any(att.url == self.TARGET_GIF_URL for att in message.attachments)
+        )
+
+        # Check cooldown
+        time_since = time.time() - self.last_trigger_time
+        if time_since < COOLDOWN:
+            return
+
+        if any([has_keyword, has_exact_gif_url]):
+            import random
+
+            reaction_choice = random.randint(0, 4)
+            match reaction_choice:
+                case 0:
+                    await message.channel.send(f"{self.them_emoji} :on: :top:")
+                case 1:
+                    await message.channel.send("THEM?! ON?! TOP?!")
+                case 2:
+                    await message.channel.send("THEM ON TOP")
+                case 3:
+                    await message.channel.send(self.TARGET_GIF_URL)
+                case 4:
+                    await message.add_reaction(self.them_emoji)
+                    await message.add_reaction("⬆️")
+                    await message.add_reaction("🔝")
+
+            # Increment the counter
+            await Database.increment_them_counter()
+            print(
+                f"\033[34m{message.author.display_name} triggered THEM response\033[0m"
+            )
+            self.last_trigger_time = time.time()
+
+    class DM_Manager:
+        def __init__(self, bot):
+            self.bot = bot
             self.reply = False
 
         @commands.Cog.listener()
@@ -187,9 +265,22 @@ class MessageResponder(commands.Cog):
     class Server_Manager:
         @commands.Cog.listener()
         async def on_message(self, message: disnake.Message):
-            return
-
-        # TODO: if replying to bot and contains "good" then heart the message
+            # Check if message is a reply and contains "good"
+            if (
+                message.reference
+                and "good" in message.content.lower()
+                and not message.author.bot
+            ):
+                try:
+                    # Get the message being replied to
+                    replied_msg = await message.channel.fetch_message(
+                        message.reference.message_id
+                    )
+                    # Check if the replied message is from our bot
+                    if replied_msg.author.id == self.bot.user.id:
+                        await message.add_reaction("❤️")
+                except (disnake.NotFound, disnake.Forbidden):
+                    pass
 
         @commands.Cog.listener()
         async def on_message(self, message: disnake.Message):

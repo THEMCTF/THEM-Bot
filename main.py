@@ -1,5 +1,6 @@
 import asyncio
 import os
+import sys
 import time
 
 import disnake
@@ -7,7 +8,7 @@ import yaml
 from disnake.ext import commands
 from dotenv import load_dotenv
 
-from Modules import setup_logger
+from Modules.Logger import setup_logger
 
 photo = """\033[32m hi\033[0m"""
 
@@ -28,6 +29,7 @@ config_path = os.path.normpath(config_path)
 with open(config_path, "r") as f:
     data = yaml.safe_load(f)
     GUILD_ID = data.get("guild_id")
+    list_startup = data.get("list_startup", False)
 
 
 from Modules.Database import Database
@@ -35,22 +37,6 @@ from Modules.Database import Database
 # Create the bot without a command prefix since we're using ONLY slash commands.
 bot = commands.InteractionBot(intents=disnake.Intents.all())
 bot.launch_time = time.time()  # Track when the bot started
-
-
-# Initialize database before loading cogs
-async def init_database():
-    print("Initializing database connection...")
-    try:
-        await Database.init()
-        print("Database initialized successfully")
-    except Exception as e:
-        print(f"Error initializing database: {e}")
-        raise  # Re-raise to prevent bot startup with broken database
-
-
-# Create event loop to initialize database
-loop = asyncio.get_event_loop()
-loop.run_until_complete(init_database())
 
 
 # Load cogs in parallel for faster startup
@@ -63,14 +49,19 @@ async def load_cogs():
         "Cogs.CTFother",
         "Cogs.ChangelogMonitor",  # Changelog monitoring and notifications
     ]
-    for cog in cogs:
+
+    async def load_cog(cog):
         try:
             bot.load_extension(cog)
         except Exception as e:
             print(f"Failed to load extension {cog}: {e}")
 
+    # Load all cogs concurrently
+    await asyncio.gather(*[load_cog(cog) for cog in cogs])
+
 
 # Load cogs
+loop = asyncio.get_event_loop()
 loop.run_until_complete(load_cogs())
 
 
@@ -106,24 +97,30 @@ async def get_servers():
 
 @bot.event
 async def on_ready():
+    # Start timing after connection is established
     startup_time = time.time() - bot.launch_time
 
-    # Initialize logger first thing
-    logger = await setup_logger(bot)
+    # Initialize database and logger concurrently
+    try:
+        db_init, logger = await asyncio.gather(Database.init(), setup_logger(bot))
+    except Exception as e:
+        print(f"Failed to initialize services: {e}")
+        logger = None
 
     # Build status message
     status_parts = [
         f"Loaded cogs: {', '.join(bot.cogs.keys())}",
         f"Startup time: {startup_time:.2f}s",
         f"Connected as: {bot.user}",
+        "Database: ✅" if Database.conn else "Database: ❌",
     ]
     status = "\n".join(status_parts)
 
     # Log to console with color
     print(f"\033[32m{status}\033[0m")
 
-    # Log to Discord if logger is available
-    if logger:
+    # Log to Discord if enabled and logger is available
+    if list_startup and logger:
         try:
             await logger.log(
                 text=f"Bot is online! Startup took {startup_time:.2f}s",

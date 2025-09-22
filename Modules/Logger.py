@@ -27,6 +27,10 @@ def load_config():
             LOGGING_CHANNEL = data.get("logging_channel")  # Should be an integer
             ENABLE_CHANNEL_LOGGING = data.get("enable_channel_logging", False)
             ENABLE_LOG_TO_FILE = data.get("enable_log_to_file", False)
+            # Removed invalid reference to 'self'
+            rendition = data.get(
+                "rendition", 0
+            )  # TODO: the other parts of the code should be using this by default, no?
     except Exception as e:
         print(f"Error loading logger config: {e}")
         # Keep default values if loading fails
@@ -44,7 +48,10 @@ class Logger:
     def __init__(self, bot=None, text=None, color=0x00FF00, type="INFO", priority=0):
         if not self._initialized and bot:
             self.bot = bot
-            self.rendition = 0
+            load_config()  # Ensure config is loaded
+            self.rendition = yaml.safe_load(
+                open(os.path.join(os.path.dirname(__file__), "..", "config.yml"), "r")
+            ).get("rendition", 0)
             self.default_text = text
             self.default_color = color
             self.default_type = type

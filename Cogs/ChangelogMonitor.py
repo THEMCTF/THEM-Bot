@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 from typing import Optional
 
@@ -13,6 +14,7 @@ class ChangelogUpdater(commands.Cog):
         self.bot = bot
         self._last_content: Optional[str] = None
         self.check_changelog.start()
+        self.logger = logging.getLogger(__name__)
 
     def cog_unload(self):
         self.check_changelog.cancel()
@@ -28,13 +30,20 @@ class ChangelogUpdater(commands.Cog):
             # If this is the first run, just store the content
             if self._last_content is None:
                 self._last_content = current_content
-                await Database.update_changelog_history(current_content)
+                try:
+                    await Database.update_changelog_history(current_content)
+                except Exception as e:
+                    self.logger.error(f"Failed to update changelog history: {e}")
                 return
 
             # Check if content has changed
             if current_content != self._last_content:
                 # Get all subscribers
-                subscriber_ids = await Database.get_changelog_subscribers()
+                try:
+                    subscriber_ids = await Database.get_changelog_subscribers()
+                except Exception as e:
+                    self.logger.error(f"Failed to get subscribers: {e}")
+                    subscriber_ids = []
 
                 # Create notification embed
                 embed = disnake.Embed(
@@ -50,14 +59,17 @@ class ChangelogUpdater(commands.Cog):
                         if user:
                             await user.send(embed=embed)
                     except Exception as e:
-                        print(f"Failed to notify user {user_id}: {e}")
+                        self.logger.error(f"Failed to notify user {user_id}: {e}")
 
                 # Update stored content
                 self._last_content = current_content
-                await Database.update_changelog_history(current_content)
+                try:
+                    await Database.update_changelog_history(current_content)
+                except Exception as e:
+                    self.logger.error(f"Failed to update changelog history: {e}")
 
         except Exception as e:
-            print(f"Error in changelog monitor: {e}")
+            self.logger.error(f"Error in changelog monitor: {e}")
 
     @check_changelog.before_loop
     async def before_check_changelog(self):

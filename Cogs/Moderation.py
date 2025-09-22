@@ -18,6 +18,7 @@ class ModerationCog(commands.Cog):
         default_member_permissions=disnake.Permissions(manage_messages=True),
     )
     @commands.cooldown(1, 5, commands.BucketType.channel)
+    @commands.guild_only()
     async def purge(
         self,
         inter: disnake.ApplicationCommandInteraction,
@@ -29,9 +30,9 @@ class ModerationCog(commands.Cog):
         await inter.response.defer(ephemeral=True)
 
         # Check if amount is valid
-        if amount < 1 or amount > 100:
+        if amount < 1 or amount > 1000:
             await inter.followup.send(
-                "Please specify a number between 1 and 100", ephemeral=True
+                "Please specify a number between 1 and 1,000", ephemeral=True
             )
             return
 
@@ -57,13 +58,14 @@ class ModerationCog(commands.Cog):
                 "I don't have permission to delete messages", ephemeral=True
             )
 
-    @log(text="Timeout command was used", color=0xFF0000)
     @commands.slash_command(
         name="timeout",
         description="Time a user out",
         default_member_permissions=disnake.Permissions(moderate_members=True),
     )
     @commands.cooldown(1, 5, commands.BucketType.user)
+    @commands.guild_only()
+    @log(text="Timeout command was used", color=0xFF0000)
     async def timeout(
         self,
         inter: disnake.ApplicationCommandInteraction,
@@ -99,26 +101,29 @@ class ModerationCog(commands.Cog):
                 f"Failed to timeout user: {str(e)}", ephemeral=True
             )
 
+    # TODO: make it select which challenge it's for
     @log(text="Solution marked", color=0x00FF00)
-    @commands.user_command(name="Mark solution")
+    @commands.message_command(name="Solution")
     async def mark_solution(
-        self, inter: disnake.ApplicationCommandInteraction, user: disnake.User
+        self, inter: disnake.ApplicationCommandInteraction, message: disnake.Message
     ):
-        if not isinstance(inter.channel, disnake.Thread):
+        # Check if channel is in the correct category
+        if inter.channel.category_id != 1385339846117294110:
             await inter.response.send_message(
-                "This command can only be used in threads", ephemeral=True
+                "This command can only be used in the ticket category", ephemeral=True
             )
             return
 
         try:
             await Database.add_solution(
-                thread_id=inter.channel.id,
-                user_id=user.id,
+                channel_id=inter.channel.id,
+                message_id=message.id,
                 marked_by=inter.author.id,
             )
 
             await inter.response.send_message(
-                f"✅ Marked {user.mention}'s message as solution", ephemeral=True
+                f"✅ Marked {message} as solution",
+                ephemeral=True,
             )
 
         except Exception as e:
@@ -129,17 +134,18 @@ class ModerationCog(commands.Cog):
     @log(text="Solution count requested", color=0x00FF00)
     @commands.slash_command(
         name="solutions",
-        description="Get the number of solutions in this channel",
+        description="Get the solutions in this channel",
     )
     async def get_solutions(self, inter: disnake.ApplicationCommandInteraction):
-        if not isinstance(inter.channel, disnake.Thread):
+        # Check if channel is in the correct category
+        if inter.channel.category_id != 1385339846117294110:
             await inter.response.send_message(
-                "This command can only be used in threads", ephemeral=True
+                "This command can only be used in the ticket category", ephemeral=True
             )
             return
 
         try:
-            solutions = await Database.get_solutions(thread_id=inter.channel.id)
+            solutions = await Database.get_solutions(channel_id=inter.channel.id)
 
             if not solutions:
                 await inter.response.send_message(
@@ -148,16 +154,18 @@ class ModerationCog(commands.Cog):
                 return
 
             # Format solutions nicely
-            users = []
+            messages = []
             for solution in solutions:
-                user = await self.bot.fetch_user(solution["user_id"])
-                if user:
-                    users.append(user.mention)
+                channel = inter.channel
+                message = await channel.fetch_message(solution["message_id"])
+                if message:
+                    message_link = f"https://discord.com/channels/{inter.guild.id}/{channel.id}/{message.id}"
+                    messages.append(f"[{message.content}]({message_link})")
 
-            solutions_text = "\n".join(f"• {user}" for user in users)
+            solutions_text = "\n".join(f"• {msg}" for msg in messages)
 
             await inter.response.send_message(
-                f"**Solutions in this thread:**\n{solutions_text}", ephemeral=True
+                f"**Solutions in this channel:**\n{solutions_text}", ephemeral=True
             )
 
         except Exception as e:

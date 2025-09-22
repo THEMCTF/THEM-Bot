@@ -7,6 +7,7 @@ import disnake
 from disnake.ext import commands
 
 from Modules import log
+from Modules.CooldownManager import dynamic_cooldown
 
 
 class GeneralCog(commands.Cog):
@@ -16,9 +17,12 @@ class GeneralCog(commands.Cog):
     # --- Slash Commands ---
     @log(text="Ping command was used", color=0x00FF00)
     @commands.slash_command(name="ping", description="Check bot latency and uptime")
-    @commands.cooldown(1, 5, commands.BucketType.user)  # 1 use per 5 seconds per user
+    @dynamic_cooldown()
     async def ping(self, inter: disnake.ApplicationCommandInteraction):
-        # Calculate various metrics
+        # Create container
+        container = disnake.ui.View()
+
+        # Calculate initial metrics
         start_time = time.perf_counter()
         await inter.response.defer()
         end_time = time.perf_counter()
@@ -29,27 +33,60 @@ class GeneralCog(commands.Cog):
         # Calculate uptime
         current_time = time.time()
         uptime = current_time - self.bot.launch_time
-
         days = int(uptime // (24 * 3600))
         hours = int((uptime % (24 * 3600)) // 3600)
         minutes = int((uptime % 3600) // 60)
         seconds = int(uptime % 60)
-
         uptime_str = f"{days}d {hours}h {minutes}m {seconds}s"
 
-        # Create a fancy message with unicode blocks
-        message = (
-            "```ansi\n"
-            "\033[1;32mBot Status\033[0m\n"
-            "├─ \033[1;34mPing\033[0m\n"
-            f"│  ├─ API: {api_latency}ms\n"
-            f"│  └─ WebSocket: {websocket_latency}ms\n"
-            "└─ \033[1;35mUptime\033[0m\n"
-            f"   └─ {uptime_str}\n"
-            "```"
+        # Create embeds for different sections
+        status_embed = disnake.Embed(title="Bot Status", color=disnake.Color.green())
+        status_embed.add_field(
+            name="API Latency", value=f"{api_latency}ms", inline=True
         )
+        status_embed.add_field(
+            name="WebSocket Latency", value=f"{websocket_latency}ms", inline=True
+        )
+        status_embed.add_field(name="Uptime", value=uptime_str, inline=False)
 
-        await inter.followup.send(message)
+        # Add refresh button
+        refresh_button = disnake.ui.Button(
+            style=disnake.ButtonStyle.green, label="Refresh", custom_id="refresh_ping"
+        )
+        container.add_item(refresh_button)
+
+        # Send initial message with embed and button
+        await inter.followup.send(embed=status_embed, view=container)
+
+    @commands.Cog.listener("on_button_click")
+    async def ping_button_handler(self, inter: disnake.MessageInteraction):
+        if inter.component.custom_id != "refresh_ping":
+            return
+
+        # Calculate new metrics
+        api_latency = round(self.bot.latency * 1000)
+        websocket_latency = round(self.bot.latency * 1000)
+
+        current_time = time.time()
+        uptime = current_time - self.bot.launch_time
+        days = int(uptime // (24 * 3600))
+        hours = int((uptime % (24 * 3600)) // 3600)
+        minutes = int((uptime % 3600) // 60)
+        seconds = int(uptime % 60)
+        uptime_str = f"{days}d {hours}h {minutes}m {seconds}s"
+
+        # Update embed
+        status_embed = disnake.Embed(title="Bot Status", color=disnake.Color.green())
+        status_embed.add_field(
+            name="API Latency", value=f"{api_latency}ms", inline=True
+        )
+        status_embed.add_field(
+            name="WebSocket Latency", value=f"{websocket_latency}ms", inline=True
+        )
+        status_embed.add_field(name="Uptime", value=uptime_str, inline=False)
+
+        # Update message with new embed
+        await inter.response.edit_message(embed=status_embed)
 
     @log(text="Changelog command was used", color=0x00FF00)
     @commands.slash_command(
@@ -116,24 +153,60 @@ class GeneralCog(commands.Cog):
 
     @log(text="Gif command was used", color=0xFF0000)
     @commands.slash_command(name="gif", description="gif.")
-    @commands.cooldown(1, 10, commands.BucketType.user)  # 1 use per 10 seconds per user
+    @dynamic_cooldown()
     async def gif(self, inter: disnake.ApplicationCommandInteraction):
         await inter.response.send_message(
-            "https://cdn.discordapp.com/attachments/1382763557816500227/1400565040100409405/5NHcc2CSekZ0u3Cb8cVYKCbvDwGz3O372m9bteYZvljpiaUeyaodrWuuML0UK7iDMWilkUkQJR2Pl1xEaOC86BvHHf2RjbJfjWqOStrVYQnxzXEOkT6QzV9nFE7zTuh1TmUh3B74WN9naNsF4wU2tgLHJQ2DtlCcjCwoWrfdZuVMoUiRMp6ZqlWTK3TeHLUDeWlnXi6CuCmHK67geXDD0zh9B5iOiFWxl5fX6OQBPmLdhRpMpItCjnDuxCeCSlItsk9ZU9RALGfmLPFSTBDcE79OTrKanVNJZFHfF74QFrTq839ZYAeNGoEzBInEaC9dgtrlZ2bF640olzMbOx1XB6G9xmyp0ibkSarknXVGiEVPtgDatFrGbo14uZ1x5lZMXlqheNjbq1Bof3JsaL6PD1MpPsVhir6Cjuns4pJl8yWdBHdWKC1xtzLZSH3nKQXAxzNmy8ZFEKBvE2KowiTjgFid0tngNkt0zho1OZ9NJgk7eA8r7VjFQXiB9D1X..gif"
+            "https://tenor.com/view/them-ctf-scream-scream-if-you-love-them-the-rock-gif-5196550339096611233"
         )
 
     @log(text="Source command was used", color=0x00FF00)
     @commands.slash_command(name="source", description="Sends HER?! source code")
-    @commands.cooldown(1, 30, commands.BucketType.user)  # 1 use per 30 seconds per user
+    @dynamic_cooldown()
     async def source(self, inter: disnake.ApplicationCommandInteraction):
         await inter.response.send_message("https://github.com/THEMCTF/THEM-Bot")
 
-    @log()  # fucking hell
+    @log(text="Them counter command was used", color=0x00FF00)
+    @commands.slash_command(
+        name="themcount", description="Shows how many times THEM has been summoned"
+    )
+    @dynamic_cooldown()
+    async def them_count(self, inter: disnake.ApplicationCommandInteraction):
+        from Modules.Database import Database
+
+        count = await Database.get_them_counter()
+        await inter.response.send_message(
+            f"THEM has been summoned **{count:,}** times!", ephemeral=False
+        )
+
+    @log()
     @commands.slash_command(name="help", description="List all slash commands.")
+    @dynamic_cooldown()
     async def help_slash(self, inter: disnake.ApplicationCommandInteraction):
-        help_text = "Available slash commands:\n"
+        """Shows all available commands"""
+        help_text = "```\nAvailable Commands:\n"
+
+        # Group commands by cog
+        cog_commands = {}
+
         for cmd in self.bot.application_commands:
-            help_text += f"/{cmd.name}: {cmd.description}\n"
+            if isinstance(
+                cmd, (commands.InvokableSlashCommand, commands.SubCommandGroup)
+            ):
+                cog_name = cmd.cog_name or "No Category"
+                if cog_name not in cog_commands:
+                    cog_commands[cog_name] = []
+                # Get description, fallback to command name if no description
+                desc = getattr(cmd, "description", "") or "No description available"
+                cog_commands[cog_name].append(f"/{cmd.name}: {desc}")
+
+        # Format and add each category
+        for cog_name, cmds in sorted(cog_commands.items()):
+            if cmds:  # Only show categories that have commands
+                help_text += f"\n{cog_name}:\n"
+                for cmd in sorted(cmds):
+                    help_text += f"  {cmd}\n"
+
+        help_text += "```"
         await inter.response.send_message(help_text, ephemeral=True)
 
 

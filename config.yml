@@ -1,6 +1,7 @@
 # Bot configuration file
 guild_id: 1382763556642099240
 announcements: 1382763557816500227
+list_startup: false
 
 # Channel restrictions
 restricted_channels:
@@ -18,6 +19,7 @@ restricted_channels:
 # Logging configuration
 logging_channel: 1382763558000918577
 enable_channel_logging: true
+rendition: 0
 
 # Rate limiting (in seconds)
 cooldowns:
