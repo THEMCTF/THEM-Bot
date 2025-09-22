@@ -2,6 +2,7 @@
 guild_id: 1382763556642099240
 announcements: 1382763557816500227
 list_startup: false
+read_dms_on_start: true
 
 # Channel restrictions
 restricted_channels:

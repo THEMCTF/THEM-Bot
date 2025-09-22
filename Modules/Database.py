@@ -2,6 +2,7 @@ import os
 import platform
 import shutil
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
@@ -489,3 +490,19 @@ class Database:
         except Exception as e:
             print(f"Failed to get them counter: {e}")
             return 0
+
+    @classmethod
+    async def get_latest_dm_timestamp(cls) -> Optional[datetime]:
+        """Get timestamp of the most recent DM in the database"""
+        query = """
+            SELECT timestamp
+            FROM dm_logs
+            ORDER BY timestamp DESC
+            LIMIT 1
+        """
+        try:
+            timestamp = await cls.conn.fetchval(query)
+            return timestamp
+        except Exception as e:
+            print(f"Failed to get latest DM timestamp: {e}")
+            return datetime.min.replace(tzinfo=timezone.utc)

@@ -3,6 +3,7 @@ import os
 import random
 import re
 import time
+from datetime import datetime, timezone
 
 import disnake
 import yaml
@@ -41,9 +42,41 @@ class MessageResponder(commands.Cog):
         self.bot = bot
         self.last_trigger_time = 0
         self.them_emoji = "<:them:1410349269948436530>"
+        # Read config
+        with open(config_path, "r") as f:
+            self.config = yaml.safe_load(f)
 
-    @commands.Cog.listener()
-    async def on_message(self, message: disnake.Message):
+    async def cog_load(self):
+        """Called when the cog is loaded"""
+        if self.config.get("read_dms_on_start", False):
+            await self.fetch_missed_dms()
+
+    async def fetch_missed_dms(self):
+        """Fetch and save DMs that were received while bot was offline"""
+        try:
+            # Get timestamp of last logged DM
+            last_dm = await Database.get_latest_dm_timestamp()
+
+            for dm_channel in self.bot.private_channels:
+                if isinstance(dm_channel, disnake.DMChannel):
+                    # Fetch message history since last logged DM
+                    async for message in dm_channel.history(
+                        limit=None, after=last_dm, oldest_first=True
+                    ):
+                        if not message.author.bot:
+                            await Database.log_dm(
+                                user_id=message.author.id,
+                                username=str(message.author),
+                                content=message.content,
+                                message_id=message.id,
+                                has_attachments=bool(message.attachments),
+                                attachment_count=len(message.attachments),
+                            )
+            print("Successfully caught up on missed DMs")
+        except Exception as e:
+            print(f"Error fetching missed DMs: {e}")
+
+    async def handle_them_message(self, message: disnake.Message):
         # Check if message is a reply and contains "good"
         if (
             message.reference
@@ -117,6 +150,34 @@ class MessageResponder(commands.Cog):
                 f"\033[34m{message.author.display_name} triggered THEM response\033[0m"
             )
             self.last_trigger_time = time.time()
+
+    async def handle_dm(self, message):
+        """Handle DM messages"""
+        user = message.author
+        content = message.content
+
+        print(f"DM from {user.name}: {content}")
+
+        # Log DM
+        await Database.log_dm(
+            user_id=user.id,
+            username=str(user),
+            content=content,
+            message_id=message.id,
+            has_attachments=bool(message.attachments),
+            attachment_count=len(message.attachments),
+        )
+
+    @commands.Cog.listener()
+    async def on_message(self, message: disnake.Message):
+        # Handle DMs
+        if isinstance(message.channel, disnake.DMChannel):
+            if not message.author.bot:
+                await self.handle_dm(message)
+            return
+
+        # Handle server messages
+        await self.handle_them_message(message)
 
     class DM_Manager:
         def __init__(self, bot):
