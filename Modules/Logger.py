@@ -9,6 +9,8 @@ import disnake
 import yaml
 from disnake.ext import commands
 
+from .Database import Database
+
 # Initialize defaults
 LOGGING_CHANNEL = None
 ENABLE_CHANNEL_LOGGING = False
@@ -60,40 +62,23 @@ class Logger:
 
     async def log(self, text, color, type, priority, user=None):
         """The actual logging method"""
-        if ENABLE_LOG_TO_FILE == True:
-            # Log to file in proper JSON format
-            log_entry = {
-                "timestamp": datetime.datetime.now().isoformat(),
-                "user_id": user.id if user else None,
-                "username": str(user) if user else None,
-                "message": text,
-                "type": type,
-                "priority": priority,
-                "color": color,
-            }
-
-            # Write JSON to file (append mode)
-            log_file = os.path.join(os.path.dirname(__file__), "bot_logs.json")
+        if ENABLE_LOG_TO_FILE:
             try:
-                logs = []
-                if os.path.exists(log_file):
-                    with open(log_file, "r") as f:
-                        try:
-                            logs = yaml.safe_load(f) or []
-                            if not isinstance(logs, list):
-                                logs = []
-                        except Exception as e:
-                            print(f"Error reading log file: {e}")
-                            logs = []
-
-                # Append new log entry
-                logs.append(log_entry)
-
-                # Write back to file
-                with open(log_file, "w") as f:
-                    yaml.safe_dump(logs, f, sort_keys=False, indent=2)
+                query = """
+                    INSERT INTO action_logs (user_id, username, message, type, priority, color)
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                """
+                await Database.conn.execute(
+                    query,
+                    user.id if user else None,
+                    str(user) if user else None,
+                    text,
+                    type,
+                    priority,
+                    color,
+                )
             except Exception as e:
-                print(f"Error writing to log file: {e}")
+                print(f"Failed to write log to database: {e}")
 
         if ENABLE_CHANNEL_LOGGING == False:
             print(f"{type}: {text}; {user}")
@@ -279,7 +264,14 @@ logger = None
 async def setup_logger(bot_instance):
     global bot, logger
     bot = bot_instance
+
+    # Create data directory if it doesn't exist
+    data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+    os.makedirs(data_dir, exist_ok=True)
+
+    # Initialize logger
     logger = Logger(bot_instance)
+
     return logger
 
 

@@ -1,3 +1,4 @@
+import asyncio
 import os
 import platform
 import shutil
@@ -26,6 +27,26 @@ class Database:
         return cls._instance
 
     @classmethod
+    async def get_latest_dm_timestamp(cls) -> Optional[datetime]:
+        """Get timestamp of the most recent DM in the database"""
+        if not cls.conn:
+            print("Database not initialized")
+            return datetime.min.replace(tzinfo=timezone.utc)
+
+        query = """
+            SELECT timestamp
+            FROM dm_logs
+            ORDER BY timestamp DESC
+            LIMIT 1
+        """
+        try:
+            timestamp = await cls.conn.fetchval(query)
+            return timestamp if timestamp else datetime.min.replace(tzinfo=timezone.utc)
+        except Exception as e:
+            print(f"Failed to get latest DM timestamp: {e}")
+            return datetime.min.replace(tzinfo=timezone.utc)
+
+    @classmethod
     async def init(cls):
         """Initialize the database connection and tables"""
         if not cls._is_postgres_installed():
@@ -48,31 +69,50 @@ class Database:
         db_name = os.getenv("DB_NAME", "themcbot")
         db_host = os.getenv("DB_HOST", "localhost")
 
-        try:
-            await cls._create_default_user()
-            cls.conn = await asyncpg.connect(
-                user=db_user,
-                password=db_password,
-                database=db_name,
-                host=db_host,
-            )
-            await cls.create_dm_log_table()
-            await cls.create_solutions_table()
-            await cls.create_counters_table()
-        except Exception as e:
-            print(f"Connection error: {e}")
-            print("\nTrying to create database and user...")
-            await cls._setup_database()
-            # Retry connection
-            cls.conn = await asyncpg.connect(
-                user=db_user,
-                password=db_password,
-                database=db_name,
-                host=db_host,
-            )
-            await cls.create_dm_log_table()
-            await cls.create_solutions_table()
-            await cls.create_counters_table()
+        tries = 0
+        max_tries = 3
+        while tries < max_tries:
+            try:
+                await cls._create_default_user()
+                cls.conn = await asyncpg.connect(
+                    user=db_user,
+                    password=db_password,
+                    database=db_name,
+                    host=db_host,
+                )
+                # Create all required tables
+                await cls._create_tables()
+                print(
+                    "\033[32mDatabase connection and tables initialized successfully\033[0m"
+                )
+                return True
+            except Exception as e:
+                tries += 1
+                if tries == max_tries:
+                    print(
+                        f"\033[31mFailed to initialize database after {max_tries} attempts: {e}\033[0m"
+                    )
+                    return False
+                print(f"\nDatabase connection attempt {tries} failed: {e}")
+                print("Trying to create database and user...")
+                try:
+                    await cls._setup_database()
+                except Exception as setup_error:
+                    print(f"Failed to setup database: {setup_error}")
+                await asyncio.sleep(1)  # Wait a bit before retrying
+
+        return False
+
+    @classmethod
+    async def _create_tables(cls):
+        """Create all required tables"""
+        if not cls.conn:
+            raise Exception("Database connection not initialized")
+
+        await cls.create_dm_log_table()
+        await cls.create_solutions_table()
+        await cls.create_counters_table()
+        await cls.create_changelog_table()
 
     @staticmethod
     def _is_postgres_installed():
@@ -178,11 +218,16 @@ class Database:
     async def create_pool(cls):
         """Create the connection pool"""
         try:
+            db_user = os.getenv("DB_USER", "themcbot")
+            db_password = os.getenv("DB_PASSWORD", "themcbot")
+            db_name = os.getenv("DB_NAME", "themcbot")
+            db_host = os.getenv("DB_HOST", "localhost")
+
             cls._pool = await asyncpg.create_pool(
-                host="localhost",
-                user="postgres",
-                password="postgres",
-                database="bot_db",
+                host=db_host,
+                user=db_user,
+                password=db_password,
+                database=db_name,
             )
         except Exception as e:
             print(f"Failed to create connection pool: {e}")
@@ -211,6 +256,29 @@ class Database:
             await cls.conn.execute(query)
         except Exception as e:
             print(f"Failed to create dm_logs table: {e}")
+            raise
+
+    @classmethod
+    async def create_changelog_table(cls):
+        """Create the changelog history table if it doesn't exist"""
+        if not cls.conn:
+            raise Exception("Database connection not initialized")
+
+        query = """
+            CREATE TABLE IF NOT EXISTS changelog_history (
+                id SERIAL PRIMARY KEY,
+                content TEXT NOT NULL,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );
+            
+            -- Create index for faster timestamp-based queries
+            CREATE INDEX IF NOT EXISTS changelog_history_updated_at_idx 
+            ON changelog_history(updated_at DESC);
+        """
+        try:
+            await cls.conn.execute(query)
+        except Exception as e:
+            print(f"Failed to create changelog_history table: {e}")
             raise
 
     @classmethod
@@ -416,7 +484,14 @@ class Database:
     @classmethod
     async def update_changelog_history(cls, content: str) -> bool:
         """Add a new changelog entry to history"""
-        query = "INSERT INTO changelog_history (content) VALUES ($1)"
+        if not cls.conn:
+            print("Database not initialized")
+            return False
+
+        query = """
+            INSERT INTO changelog_history (content) 
+            VALUES ($1)
+        """
         try:
             await cls.conn.execute(query, content)
             return True
@@ -466,47 +541,3 @@ class Database:
         except Exception as e:
             print(f"Failed to get them counter: {e}")
             return 0
-
-    @classmethod
-    async def get_latest_dm_timestamp(cls) -> Optional[datetime]:
-        """Get timestamp of the most recent DM in the database"""
-        query = """
-            SELECT timestamp
-            FROM dm_logs
-            ORDER BY timestamp DESC
-            LIMIT 1
-        """
-        try:
-            timestamp = await cls.conn.fetchval(query)
-            return timestamp if timestamp else datetime.min.replace(tzinfo=timezone.utc)
-        except Exception as e:
-            print(f"Failed to get latest DM timestamp: {e}")
-            return datetime.min.replace(tzinfo=timezone.utc)
-        query = "SELECT value FROM counters WHERE name = 'them_counter'"
-        try:
-            value = await cls.conn.fetchval(query)
-            return value or 0
-        except Exception as e:
-            print(f"Failed to get them counter: {e}")
-            return 0
-
-    @classmethod
-    async def get_latest_dm_timestamp(cls) -> Optional[datetime]:
-        """Get timestamp of the most recent DM in the database"""
-        query = """
-            SELECT timestamp
-            FROM dm_logs
-            ORDER BY timestamp DESC
-            LIMIT 1
-        """
-        try:
-            timestamp = await cls.conn.fetchval(query)
-            return timestamp
-        except Exception as e:
-            print(f"Failed to get latest DM timestamp: {e}")
-            return datetime.min.replace(tzinfo=timezone.utc)
-            timestamp = await cls.conn.fetchval(query)
-            return timestamp
-        except Exception as e:
-            print(f"Failed to get latest DM timestamp: {e}")
-            return datetime.min.replace(tzinfo=timezone.utc)

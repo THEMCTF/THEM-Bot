@@ -58,6 +58,42 @@ class ModerationCog(commands.Cog):
                 "I don't have permission to delete messages", ephemeral=True
             )
 
+    @log(text="Purge (context menu) command was used", color=0xFF0000)
+    @commands.message_command(
+        name="purge",
+        default_member_permissions=disnake.Permissions(manage_messages=True),
+    )
+    @commands.cooldown(1, 10, commands.BucketType.channel)
+    @commands.guild_only()
+    async def purge_from_message(
+        self,
+        inter: disnake.ApplicationCommandInteraction,
+        message: disnake.Message,
+    ):
+        """Deletes the selected message and all messages below it."""
+        await inter.response.defer(ephemeral=True)
+
+        try:
+            # Purge messages after the target message, including the message itself.
+            # The `before` parameter is exclusive, so we find messages sent after the
+            # target message's creation time.
+            deleted = await inter.channel.purge(
+                limit=None,  # No limit, purge all applicable
+                after=message.created_at - timedelta(microseconds=1),
+                oldest_first=False,  # Not strictly necessary, but can be slightly more efficient
+            )
+
+            await inter.followup.send(
+                f"Deleted {len(deleted)} message(s).", ephemeral=True
+            )
+
+        except disnake.Forbidden:
+            await inter.followup.send(
+                "I don't have permission to delete messages.", ephemeral=True
+            )
+        except disnake.HTTPException as e:
+            await inter.followup.send(f"Failed to delete messages: {e}", ephemeral=True)
+
     @commands.slash_command(
         name="timeout",
         description="Time a user out",
@@ -121,8 +157,10 @@ class ModerationCog(commands.Cog):
                 marked_by=inter.author.id,
             )
 
+            # Create a cleaner message reference
+            jump_url = message.jump_url
             await inter.response.send_message(
-                f"✅ Marked {message} as solution",
+                f"✅ Marked [this message]({jump_url}) as solution",
                 ephemeral=True,
             )
 
