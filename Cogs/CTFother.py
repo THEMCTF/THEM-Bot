@@ -295,7 +295,7 @@ class CTFSheet(commands.Cog):
             color=disnake.Color.green(),
         )
 
-        await inter.response.send_message(embed=embed, view=view, ephemeral=True)
+        await inter.response.send_message(embed=embed, view=view)
 
     @staticmethod
     async def make_role(

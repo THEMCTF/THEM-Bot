@@ -198,7 +198,7 @@ class MessageResponder(commands.Cog):
         await self.handle_them_message(message)
 
     # Slash commands
-    @commands.slash_command(name="starry", description="ALSO TESTING")
+    # @commands.slash_command(name="starry", description="ALSO TESTING")
     async def send_dm(
         self,
         inter: disnake.ApplicationCommandInteraction,
@@ -223,11 +223,11 @@ class MessageResponder(commands.Cog):
             )
 
     @log(text="DM logs command was used", color=0x00FF00)
-    @commands.slash_command(
-        name="dm_logs",
-        description="View recent DM logs",
-        default_member_permissions=disnake.Permissions(administrator=True),
-    )
+    # @commands.slash_command(
+    # name="dm_logs",
+    # description="View recent DM logs",
+    # default_member_permissions=disnake.Permissions(administrator=True),
+    # )
     async def dm_logs(
         self,
         inter: disnake.ApplicationCommandInteraction,
