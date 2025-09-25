@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import os
 import subprocess
@@ -106,15 +107,39 @@ class CTFModalPart1(disnake.ui.Modal):
 
     async def callback(self, inter: disnake.ModalInteraction):
         """Process the first part of the form and open the second part."""
-        # Defer the response to keep the interaction alive
-        await inter.response.defer(ephemeral=True, with_message=False)
-
-        # Pass the data from this modal and the initial selection to the next modal
-        modal_part2 = CTFModalPart2(
-            selected_types=self.selected_types,
-            part1_data=inter.text_values,
+        # Respond with a button to open the next part of the form.
+        # We can't send a modal in response to a modal submission.
+        view = disnake.ui.View()
+        view.add_item(
+            disnake.ui.Button(
+                label="Continue Registration",
+                style=disnake.ButtonStyle.primary,
+                custom_id="ctf_register_part2",
+            )
         )
-        await inter.followup.send_modal(modal_part2)
+
+        await inter.response.send_message(
+            "Click below to continue registration.", view=view, ephemeral=True
+        )
+
+        # Wait for the button click to open the second modal
+        try:
+            button_inter: disnake.MessageInteraction = await inter.bot.wait_for(
+                "button_click",
+                check=lambda i: i.component.custom_id == "ctf_register_part2"
+                and i.author.id == inter.author.id,
+                timeout=300,  # 5-minute timeout for the user to click 'Continue'
+            )
+            modal_part2 = CTFModalPart2(
+                selected_types=self.selected_types, part1_data=inter.text_values
+            )
+            await button_inter.response.send_modal(modal_part2)
+        except asyncio.TimeoutError:
+            # The user didn't click the 'Continue' button in time.
+            # We can edit the message to indicate that the registration has expired.
+            await inter.edit_original_response(
+                content="Registration timed out.", view=None
+            )
 
 
 class CTFModalPart2(disnake.ui.Modal):
@@ -155,7 +180,7 @@ class CTFModalPart2(disnake.ui.Modal):
                 custom_id="discord",
                 style=disnake.TextInputStyle.short,
                 required=False,
-                placeholder="discord.gg/themctf",
+                placeholder="discord.gg/its-them",
                 max_length=200,
             ),
             disnake.ui.TextInput(
@@ -182,26 +207,27 @@ class CTFModalPart2(disnake.ui.Modal):
             current_year = datetime.datetime.now().year
             ctf_name = f"{ctf_name_input} {current_year}"
 
-            # Format the start and end to unix time
-            start_str = self.part1_data.get("start", "").strip()
-            end_str = self.part1_data.get("end", "").strip()
-
-            start_time_dt = datetime.datetime.strptime(
-                start_str, "%Y-%m-%d %H:%M"
-            ).replace(tzinfo=datetime.timezone.utc)
-            end_time_dt = datetime.datetime.strptime(end_str, "%Y-%m-%d %H:%M").replace(
-                tzinfo=datetime.timezone.utc
-            )
-
             try:
-                if end_time_dt <= start_time_dt:
-                    await inter.response.send_message(
-                        "❌ End time must be after start time.", ephemeral=True
-                    )
-                    return
+                # Format the start and end to unix time
+                start_str = self.part1_data.get("start", "").strip()
+                end_str = self.part1_data.get("end", "").strip()
+
+                start_time_dt = datetime.datetime.strptime(
+                    start_str, "%Y-%m-%d %H:%M"
+                ).replace(tzinfo=datetime.timezone.utc)
+                end_time_dt = datetime.datetime.strptime(
+                    end_str, "%Y-%m-%d %H:%M"
+                ).replace(tzinfo=datetime.timezone.utc)
+
             except ValueError:
                 await inter.response.send_message(
                     "❌ Invalid date format. Please use YYYY-MM-DD HH:MM (UTC).",
+                    ephemeral=True,
+                )
+                return
+            if end_time_dt <= start_time_dt:
+                await inter.response.send_message(
+                    "❌ End time must be after start time.",
                     ephemeral=True,
                 )
                 return
@@ -283,7 +309,11 @@ class CTFModalPart2(disnake.ui.Modal):
                     perms={
                         inter.guild.default_role: disnake.PermissionOverwrite(
                             view_channel=False
+                        inter.guild.default_role: disnake.PermissionOverwrite(view_channel=False),
+                        disnake.utils.get(inter.guild.roles, name=ctf_name): disnake.PermissionOverwrite(
+                            view_channel=True
                         ),
+                        # Add the other role if it exists
                         disnake.utils.get(
                             inter.guild.roles, name=ctf_name
                         ): disnake.PermissionOverwrite(view_channel=True),
@@ -338,8 +368,8 @@ class CTFModalPart2(disnake.ui.Modal):
 
             # Log the CTF registration (assuming Logger is properly set up)
             try:
-                await Logger.log_action(
-                    self,
+                logger_instance = Logger(self.bot)
+                await logger_instance.log(
                     text=f"CTF registered: {ctf_name} by {inter.author} ({inter.author.id})",
                     color=disnake.Color.blue(),
                     type="CTF Registration",
@@ -728,6 +758,29 @@ class CTFSheet(commands.Cog):
             return
 
         try:
+            await inter.author.add_roles(
+                role_to_assign, reason=f"Claimed via button for {ctf_name}"
+            )
+            await inter.response.send_message(
+                f"✅ You have been given the **{ctf_name}** role!", ephemeral=True
+            )
+        except disnake.Forbidden:
+            await inter.response.send_message(
+                "❌ I don't have permission to assign roles.", ephemeral=True
+            )
+        except Exception as e:
+            await inter.response.send_message(
+                f"❌ An error occurred: {e}", ephemeral=True
+            )
+
+    @commands.Cog.listener()
+    async def on_thread_update(self, before: disnake.Thread, after: disnake.Thread):
+        """This listener is now empty as the button disabling is handled by a background task."""
+        pass
+
+
+def setup(bot):
+    bot.add_cog(CTFSheet(bot))
             await inter.author.add_roles(
                 role_to_assign, reason=f"Claimed via button for {ctf_name}"
             )

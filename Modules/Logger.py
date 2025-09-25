@@ -104,7 +104,7 @@ class Logger:
         else:
             print(f"Error: Logger channel with ID {LOGGING_CHANNEL} not found.")
 
-    def __call__(
+    def __call__(  # This is the decorator part
         self,
         func=None,
         *,
