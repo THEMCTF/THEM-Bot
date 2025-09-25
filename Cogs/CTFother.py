@@ -4,12 +4,12 @@ import subprocess
 
 import disnake
 import yaml
-from disnake import TextInputStyle, ui
+from disnake import TextInputStyle
 from disnake.ext import commands, tasks
-from disnake.ui import Modal, StringSelect, TextInput, View
 
 from Modules import log
 from Modules.CooldownManager import dynamic_cooldown
+from Modules.Database import Database
 from Modules.Logger import Logger
 
 # --- Configuration Loading ---
@@ -54,12 +54,12 @@ class CTFSelectView(disnake.ui.View):
         self.selected_types = select.values
 
         # Create and send the modal
-        modal = CTFModal(self.selected_types)
+        modal = CTFModalPart1(self.selected_types)
         await interaction.response.send_modal(modal)
 
 
 # Subclassing the modal - modals can only contain TextInput components
-class CTFModal(disnake.ui.Modal):
+class CTFModalPart1(disnake.ui.Modal):
     """Modal form for CTF registration details."""
 
     def __init__(self, selected_types=None):
@@ -67,36 +67,28 @@ class CTFModal(disnake.ui.Modal):
         self.selected_types = selected_types or []
 
         components = [
-            TextInput(
+            disnake.ui.TextInput(
                 label="CTF name (Do not include year)",
                 custom_id="name",
                 style=disnake.TextInputStyle.short,
                 required=True,
                 max_length=100,
             ),
-            TextInput(
+            disnake.ui.TextInput(
                 label="CTF start time (YYYY-MM-DD HH:MM, UTC)",
                 custom_id="start",
                 style=disnake.TextInputStyle.short,
                 required=True,
                 max_length=100,
             ),
-            TextInput(
+            disnake.ui.TextInput(
                 label="CTF end time (YYYY-MM-DD HH:MM, UTC)",
                 custom_id="end",
                 style=disnake.TextInputStyle.short,
                 required=True,
                 max_length=100,
             ),
-            TextInput(
-                label="More categories (separate with semicolon ;)",
-                custom_id="cats",
-                style=disnake.TextInputStyle.short,
-                required=False,
-                placeholder="e.g. steganography;blockchain",
-                max_length=200,
-            ),
-            TextInput(
+            disnake.ui.TextInput(
                 label="Website URL",
                 custom_id="website",
                 style=disnake.TextInputStyle.short,
@@ -104,7 +96,45 @@ class CTFModal(disnake.ui.Modal):
                 placeholder="https://ctf.example.com",
                 max_length=200,
             ),
-            TextInput(
+        ]
+
+        super().__init__(
+            title="CTF Registration (1/2)",
+            components=components,
+            timeout=900,  # 15 minute timeout
+        )
+
+    async def callback(self, inter: disnake.ModalInteraction):
+        """Process the first part of the form and open the second part."""
+        # Defer the response to keep the interaction alive
+        await inter.response.defer(ephemeral=True, with_message=False)
+
+        # Pass the data from this modal and the initial selection to the next modal
+        modal_part2 = CTFModalPart2(
+            selected_types=self.selected_types,
+            part1_data=inter.text_values,
+        )
+        await inter.followup.send_modal(modal_part2)
+
+
+class CTFModalPart2(disnake.ui.Modal):
+    """Second part of the modal form for CTF registration."""
+
+    def __init__(self, selected_types: list, part1_data: dict):
+        """Initialize the second modal with data from the first."""
+        self.selected_types = selected_types
+        self.part1_data = part1_data
+
+        components = [
+            disnake.ui.TextInput(
+                label="More categories (separate with semicolon ;)",
+                custom_id="cats",
+                style=disnake.TextInputStyle.short,
+                required=False,
+                placeholder="e.g. steganography;blockchain",
+                max_length=200,
+            ),
+            disnake.ui.TextInput(
                 label="Team name",
                 custom_id="teamname",
                 style=disnake.TextInputStyle.short,
@@ -112,7 +142,7 @@ class CTFModal(disnake.ui.Modal):
                 placeholder="THEM?!",
                 max_length=200,
             ),
-            TextInput(
+            disnake.ui.TextInput(
                 label="Password",
                 custom_id="password",
                 style=disnake.TextInputStyle.short,
@@ -120,7 +150,7 @@ class CTFModal(disnake.ui.Modal):
                 placeholder="v3rY-S3cur3-Pa55w0rd",
                 max_length=200,
             ),
-            TextInput(
+            disnake.ui.TextInput(
                 label="Discord",
                 custom_id="discord",
                 style=disnake.TextInputStyle.short,
@@ -128,10 +158,18 @@ class CTFModal(disnake.ui.Modal):
                 placeholder="discord.gg/themctf",
                 max_length=200,
             ),
+            disnake.ui.TextInput(
+                label="Spreadsheet",
+                custom_id="sheet",
+                style=disnake.TextInputStyle.short,
+                required=False,
+                placeholder="h",
+                max_length=200,
+            ),
         ]
 
         super().__init__(
-            title="CTF Registration Form",
+            title="CTF Registration (2/2)",
             components=components,
             timeout=900,  # 15 minute timeout
         )
@@ -140,22 +178,23 @@ class CTFModal(disnake.ui.Modal):
         """Process the submitted CTF registration form."""
         try:
             # Get values from the modal
-            ctf_name_input = inter.text_values.get("name", "").strip()
+            ctf_name_input = self.part1_data.get("name", "").strip()
             current_year = datetime.datetime.now().year
             ctf_name = f"{ctf_name_input} {current_year}"
 
             # Format the start and end to unix time
-            start_str = inter.text_values.get("start", "").strip()
-            end_str = inter.text_values.get("end", "").strip()
+            start_str = self.part1_data.get("start", "").strip()
+            end_str = self.part1_data.get("end", "").strip()
+
+            start_time_dt = datetime.datetime.strptime(
+                start_str, "%Y-%m-%d %H:%M"
+            ).replace(tzinfo=datetime.timezone.utc)
+            end_time_dt = datetime.datetime.strptime(end_str, "%Y-%m-%d %H:%M").replace(
+                tzinfo=datetime.timezone.utc
+            )
 
             try:
-                start_time = int(
-                    datetime.datetime.strptime(start_str, "%Y-%m-%d %H:%M").timestamp()
-                )
-                end_time = int(
-                    datetime.datetime.strptime(end_str, "%Y-%m-%d %H:%M").timestamp()
-                )
-                if end_time <= start_time:
+                if end_time_dt <= start_time_dt:
                     await inter.response.send_message(
                         "❌ End time must be after start time.", ephemeral=True
                     )
@@ -167,8 +206,17 @@ class CTFModal(disnake.ui.Modal):
                 )
                 return
 
+            start_time = int(start_time_dt.timestamp())
+            end_time = int(end_time_dt.timestamp())
+
+            # Combine data from both modals
+            part2_data = inter.text_values
             more_cats = inter.text_values.get("cats", "").strip()
-            website = inter.text_values.get("website", "").strip()
+            website = self.part1_data.get("website", "").strip()
+            team_name = part2_data.get("teamname", "N/A").strip()
+            password = part2_data.get("password", "").strip()
+            discord_invite = part2_data.get("discord", "").strip()
+            sheet_url = part2_data.get("sheet", "").strip()
 
             # Process additional categories
             additional_categories = (
@@ -201,6 +249,15 @@ class CTFModal(disnake.ui.Modal):
                     inline=False,
                 )
 
+            # Add credentials section if provided
+            creds_value = f"**Team:** `{team_name}`"
+            if password:
+                creds_value += f"\n**Password:** ||`{password}`||"
+            if discord_invite:
+                creds_value += f"\n**Discord:** {discord_invite}"
+
+            embed.add_field(name="🔒 Credentials", value=creds_value, inline=False)
+
             if website:
                 embed.add_field(name="🌐 Website", value=website, inline=True)
 
@@ -220,6 +277,7 @@ class CTFModal(disnake.ui.Modal):
                     # Pass CTF details to create the info thread
                     website=website,
                     start_time=start_time,
+                    sheet_url=sheet_url,
                     end_time=end_time,
                     # ---
                     perms={
@@ -263,6 +321,21 @@ class CTFModal(disnake.ui.Modal):
                     f"Could not find announcement channel with ID {ANNOUNCEMENT_CHANNEL_ID}"
                 )
 
+            # --- Add CTF to database ---
+            await Database.log_ctf(
+                name=ctf_name,
+                start_time=start_time_dt,
+                end_time=end_time_dt,
+                website=website,
+                team_name=team_name,
+                password=password,
+                discord_invite=discord_invite,
+                sheet_url=sheet_url,
+                categories=all_categories,
+                registered_by=inter.author.id,
+            )
+            # ---------------------------
+
             # Log the CTF registration (assuming Logger is properly set up)
             try:
                 await Logger.log_action(
@@ -291,7 +364,7 @@ class GetRoleView(disnake.ui.View):
         self.ctf_name = ctf_name
         self.player_roles = set(player_roles)
         self.add_item(
-            ui.Button(
+            disnake.ui.Button(
                 label=f"Claim {ctf_name} Role",
                 style=disnake.ButtonStyle.green,
                 custom_id=f"get_ctf_role:{ctf_name}",
@@ -347,7 +420,6 @@ class CTFSheet(commands.Cog):
     def __init__(self, bot):
         """Initialize the CTF cog."""
         self.bot = bot
-        self.bot.add_command(send_role_button_command)
         self.check_ended_ctfs.start()
 
     def cog_unload(self):
@@ -360,7 +432,10 @@ class CTFSheet(commands.Cog):
         now = datetime.datetime.now(datetime.timezone.utc)
         ended_ctfs = []
 
-        for ctf_name, data in active_ctf_buttons.items():
+        # Create a copy of the items to avoid runtime errors if the dict is modified
+        active_buttons_copy = list(active_ctf_buttons.items())
+
+        for ctf_name, data in active_buttons_copy:
             if now >= data["end_time"]:
                 try:
                     channel = self.bot.get_channel(
@@ -369,9 +444,9 @@ class CTFSheet(commands.Cog):
                     message = await channel.fetch_message(data["message_id"])
 
                     # Create a new view with a disabled button
-                    disabled_view = ui.View()
+                    disabled_view = disnake.ui.View()
                     disabled_view.add_item(
-                        ui.Button(
+                        disnake.ui.Button(
                             label=f"{ctf_name} (Ended)",
                             style=disnake.ButtonStyle.grey,
                             disabled=True,
@@ -521,6 +596,7 @@ class CTFSheet(commands.Cog):
         perms: dict,
         website: str,
         start_time: int,
+        sheet_url: str,
         end_time: int,
         require_tag: bool = True,
     ):
@@ -531,6 +607,7 @@ class CTFSheet(commands.Cog):
             guild: The Discord guild to create the channel in
             channel_name: Name of the forum channel
             tags: List of tag dictionaries with 'name' and optionally 'emoji' keys
+            sheet_url: The URL for the Google Sheet.
             perms: Dictionary mapping role IDs/role objects to permission overwrites
             website: The URL for the CTF website.
             start_time: The UNIX timestamp for the CTF start time.
@@ -588,8 +665,9 @@ class CTFSheet(commands.Cog):
             info_embed.add_field(
                 name="⏰ End Time", value=f"<t:{end_time}:F>", inline=True
             )
+            sheet_value = sheet_url if sheet_url else "*Coming soon...*"
             info_embed.add_field(
-                name="📊 Google Sheet", value="*Coming soon...*", inline=False
+                name="📊 Google Sheet", value=sheet_value, inline=False
             )
 
             # Create a view with a placeholder calendar button
@@ -618,7 +696,7 @@ class CTFSheet(commands.Cog):
             return None
 
     @commands.Cog.listener("on_button_click")
-    @dynamic_cooldown(commands.Cooldown(1, 86400), commands.BucketType.user)
+    @dynamic_cooldown()
     async def handle_get_role_button(self, inter: disnake.MessageInteraction):
         """Handle the 'Get Role' button click."""
         custom_id = inter.component.custom_id

@@ -127,11 +127,6 @@ async def on_ready():
     # Initialize database, logger, and any other async startup tasks concurrently
     try:
         print("Initializing services...")
-        # Initialize database first to ensure tables exist
-        db_init = await Database.init()
-        if not db_init:
-            print("\033[31mFailed to initialize database\033[0m")
-            return
 
         # Then set up logger
         logger = await setup_logger(bot)

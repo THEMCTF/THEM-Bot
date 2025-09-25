@@ -112,7 +112,7 @@ class Database:
         await cls.create_dm_log_table()
         await cls.create_solutions_table()
         await cls.create_counters_table()
-        await cls.create_changelog_table()
+        await cls.create_ctfs_table()
 
     @staticmethod
     def _is_postgres_installed():
@@ -234,6 +234,27 @@ class Database:
             raise
 
     @classmethod
+    async def create_ctfs_table(cls):
+        """Create the ctf_events table if it doesn't exist"""
+        query = """
+            CREATE TABLE IF NOT EXISTS ctf_events (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                start_time TIMESTAMPTZ NOT NULL,
+                end_time TIMESTAMPTZ NOT NULL,
+                website TEXT,
+                team_name TEXT,
+                password TEXT,
+                discord_invite TEXT,
+                sheet_url TEXT,
+                categories TEXT[],
+                registered_by BIGINT,
+                registered_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );
+        """
+        await cls.conn.execute(query)
+
+    @classmethod
     async def create_dm_log_table(cls):
         """Create the DM logs table if it doesn't exist"""
         query = """
@@ -258,26 +279,6 @@ class Database:
             print(f"Failed to create dm_logs table: {e}")
             raise
 
-    @classmethod
-    async def create_changelog_table(cls):
-        """Create the changelog history table if it doesn't exist"""
-        if not cls.conn:
-            raise Exception("Database connection not initialized")
-
-        query = """
-            CREATE TABLE IF NOT EXISTS changelog_history (
-                id SERIAL PRIMARY KEY,
-                content TEXT NOT NULL,
-                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-            );
-            
-            -- Create index for faster timestamp-based queries
-            CREATE INDEX IF NOT EXISTS changelog_history_updated_at_idx 
-            ON changelog_history(updated_at DESC);
-        """
-        try:
-            await cls.conn.execute(query)
-        except Exception as e:
             print(f"Failed to create changelog_history table: {e}")
             raise
 
@@ -306,6 +307,7 @@ class Database:
             CREATE TABLE IF NOT EXISTS solutions (
                 id SERIAL PRIMARY KEY,
                 channel_id BIGINT NOT NULL,
+                message_id BIGINT NOT NULL,
                 user_id BIGINT NOT NULL,
                 marked_by BIGINT NOT NULL,
                 timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
@@ -358,6 +360,46 @@ class Database:
             return False
 
     @classmethod
+    async def log_ctf(
+        cls,
+        name: str,
+        start_time: datetime,
+        end_time: datetime,
+        website: str,
+        team_name: str,
+        password: str,
+        discord_invite: str,
+        sheet_url: str,
+        categories: list,
+        registered_by: int,
+    ) -> bool:
+        """Log a new CTF event in the database."""
+        query = """
+            INSERT INTO ctf_events
+            (name, start_time, end_time, website, team_name, password, discord_invite, sheet_url, categories, registered_by)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        """
+        try:
+            await cls.conn.execute(
+                query,
+                name,
+                start_time,
+                end_time,
+                website,
+                team_name,
+                password,
+                discord_invite,
+                sheet_url,
+                categories,
+                registered_by,
+            )
+            print(f"Successfully logged CTF: {name}")
+            return True
+        except Exception as e:
+            print(f"Failed to log CTF event: {e}")
+            return False
+
+    @classmethod
     async def get_recent_dms(cls, limit: int = 10) -> List[dict]:
         """Get recent DM logs from the database
 
@@ -394,21 +436,25 @@ class Database:
 
     @classmethod
     async def add_solution(
-        cls, channel_id: int, message_id: int, marked_by: int
+        cls, channel_id: int, message_id: int, user_id: int, marked_by: int
     ) -> bool:
         """Add a solution to the database
 
         Args:
             channel_id: The ID of the channel where the solution was marked
             message_id: The ID of the message which has the solution
+            user_id: The ID of the user who provided the solution
             marked_by: The ID of the user who marked it as a solution
         """
         query = """
-            INSERT INTO solutions (channel_id, message_id, marked_by)
-            VALUES ($1, $2, $3)
+            INSERT INTO solutions (channel_id, message_id, user_id, marked_by)
+            VALUES ($1, $2, $3, $4)
         """
         try:
-            await cls.conn.execute(query, channel_id, message_id, marked_by)
+            await cls.conn.execute(query, channel_id, message_id, user_id, marked_by)
+            print(
+                f"Solution added: channel_id={channel_id}, message_id={message_id}, user_id={user_id}, marked_by={marked_by}"
+            )
             return True
         except Exception as e:
             print(f"Failed to add solution: {e}")
@@ -425,7 +471,7 @@ class Database:
             List[dict]: List of solutions with message_id and marked_by information
         """
         query = """
-            SELECT message_id, marked_by, timestamp
+            SELECT channel_id, message_id, user_id, marked_by, timestamp
             FROM solutions
             WHERE channel_id = $1
             ORDER BY timestamp DESC
@@ -434,7 +480,9 @@ class Database:
             rows = await cls.conn.fetch(query, channel_id)
             return [
                 {
+                    "channel_id": row["channel_id"],
                     "message_id": row["message_id"],
+                    "user_id": row["user_id"],
                     "marked_by": row["marked_by"],
                     "timestamp": row["timestamp"],
                 }
@@ -443,77 +491,6 @@ class Database:
         except Exception as e:
             print(f"Failed to get solutions: {e}")
             return []
-
-    @classmethod
-    async def add_changelog_subscriber(cls, user_id: int) -> bool:
-        """Add a user to the changelog subscribers list"""
-        query = """
-            INSERT INTO changelog_subscribers (user_id)
-            VALUES ($1)
-            ON CONFLICT DO NOTHING
-        """
-        try:
-            await cls.conn.execute(query, user_id)
-            return True
-        except Exception as e:
-            print(f"Failed to add subscriber: {e}")
-            return False
-
-    @classmethod
-    async def remove_changelog_subscriber(cls, user_id: int) -> bool:
-        """Remove a user from the changelog subscribers list"""
-        query = "DELETE FROM changelog_subscribers WHERE user_id = $1"
-        try:
-            status = await cls.conn.execute(query, user_id)
-            return status == "DELETE 1"
-        except Exception as e:
-            print(f"Failed to remove subscriber: {e}")
-            return False
-
-    @classmethod
-    async def get_changelog_subscribers(cls) -> List[int]:
-        """Get all changelog subscriber user IDs"""
-        query = "SELECT user_id FROM changelog_subscribers"
-        try:
-            rows = await cls.conn.fetch(query)
-            return [row["user_id"] for row in rows]
-        except Exception as e:
-            print(f"Failed to get subscribers: {e}")
-            return []
-
-    @classmethod
-    async def update_changelog_history(cls, content: str) -> bool:
-        """Add a new changelog entry to history"""
-        if not cls.conn:
-            print("Database not initialized")
-            return False
-
-        query = """
-            INSERT INTO changelog_history (content) 
-            VALUES ($1)
-        """
-        try:
-            await cls.conn.execute(query, content)
-            return True
-        except Exception as e:
-            print(f"Failed to update changelog history: {e}")
-            return False
-
-    @classmethod
-    async def get_latest_changelog(cls) -> Optional[str]:
-        """Get the most recent changelog entry"""
-        query = """
-            SELECT content
-            FROM changelog_history
-            ORDER BY updated_at DESC
-            LIMIT 1
-        """
-        try:
-            row = await cls.conn.fetchrow(query)
-            return row["content"] if row else None
-        except Exception as e:
-            print(f"Failed to get latest changelog: {e}")
-            return None
 
     @classmethod
     async def increment_them_counter(cls) -> bool:

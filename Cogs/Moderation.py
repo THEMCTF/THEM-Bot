@@ -78,7 +78,7 @@ class ModerationCog(commands.Cog):
             # The `before` parameter is exclusive, so we find messages sent after the
             # target message's creation time.
             deleted = await inter.channel.purge(
-                limit=None,  # No limit, purge all applicable
+                limit=None,  # No l                                     imit, purge all applicable
                 after=message.created_at - timedelta(microseconds=1),
                 oldest_first=False,  # Not strictly necessary, but can be slightly more efficient
             )
@@ -154,6 +154,7 @@ class ModerationCog(commands.Cog):
             await Database.add_solution(
                 channel_id=inter.channel.id,
                 message_id=message.id,
+                user_id=message.author.id,
                 marked_by=inter.author.id,
             )
 
