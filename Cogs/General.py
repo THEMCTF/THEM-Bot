@@ -88,69 +88,6 @@ class GeneralCog(commands.Cog):
         # Update message with new embed
         await inter.response.edit_message(embed=status_embed)
 
-    @log(text="Changelog command was used", color=0x00FF00)
-    @commands.slash_command(
-        name="changelog", description="Get recent changes and manage notifications"
-    )
-    async def changelog(self, inter: disnake.ApplicationCommandInteraction):
-        # Create buttons for subscribing/unsubscribing
-        subscribe_button = disnake.ui.Button(
-            style=disnake.ButtonStyle.green,
-            label="Subscribe to Updates",
-            custom_id="changelog_subscribe",
-        )
-        unsubscribe_button = disnake.ui.Button(
-            style=disnake.ButtonStyle.red,
-            label="Unsubscribe",
-            custom_id="changelog_unsubscribe",
-        )
-
-        # Create action row with buttons
-        components = disnake.ui.ActionRow(subscribe_button, unsubscribe_button)
-
-        # Get changelog content
-        changelog_path = os.path.join(os.path.dirname(__file__), "../changelog.md")
-        with open(changelog_path, "r") as f:
-            content = f.read()
-
-        # Format message
-        message = f"```md\n{content}\n```\n\n*Click the buttons below to manage changelog notifications*"
-
-        await inter.response.send_message(message, components=components)
-
-    @commands.Cog.listener("on_button_click")
-    async def changelog_button_handler(self, inter: disnake.MessageInteraction):
-        if not inter.component.custom_id.startswith("changelog_"):
-            return
-
-        from Modules.Database import Database
-
-        if inter.component.custom_id == "changelog_subscribe":
-            success = await Database.add_changelog_subscriber(inter.author.id)
-            if success:
-                await inter.response.send_message(
-                    "You've been subscribed to changelog notifications! You'll receive a DM when changes are made.",
-                    ephemeral=True,
-                )
-            else:
-                await inter.response.send_message(
-                    "Failed to subscribe you to notifications. Please try again later.",
-                    ephemeral=True,
-                )
-
-        elif inter.component.custom_id == "changelog_unsubscribe":
-            success = await Database.remove_changelog_subscriber(inter.author.id)
-            if success:
-                await inter.response.send_message(
-                    "You've been unsubscribed from changelog notifications.",
-                    ephemeral=True,
-                )
-            else:
-                await inter.response.send_message(
-                    "Failed to unsubscribe you from notifications. Please try again later.",
-                    ephemeral=True,
-                )
-
     @log(text="Gif command was used", color=0xFF0000)
     @commands.slash_command(name="gif", description="gif.")
     @dynamic_cooldown()

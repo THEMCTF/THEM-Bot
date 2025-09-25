@@ -47,7 +47,6 @@ async def load_cogs():
         "Cogs.Moderation",
         "Cogs.CTFtime",
         "Cogs.CTFother",
-        "Cogs.ChangelogMonitor",  # Changelog monitoring and notifications
     ]
 
     async def load_cog(cog):
