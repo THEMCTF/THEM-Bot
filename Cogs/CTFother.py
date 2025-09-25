@@ -309,10 +309,10 @@ class CTFModalPart2(disnake.ui.Modal):
                     perms={
                         inter.guild.default_role: disnake.PermissionOverwrite(
                             view_channel=False
-                        inter.guild.default_role: disnake.PermissionOverwrite(view_channel=False),
-                        disnake.utils.get(inter.guild.roles, name=ctf_name): disnake.PermissionOverwrite(
-                            view_channel=True
                         ),
+                        disnake.utils.get(
+                            inter.guild.roles, name=ctf_name
+                        ): disnake.PermissionOverwrite(view_channel=True),
                         # Add the other role if it exists
                         disnake.utils.get(
                             inter.guild.roles, name=ctf_name
@@ -758,29 +758,6 @@ class CTFSheet(commands.Cog):
             return
 
         try:
-            await inter.author.add_roles(
-                role_to_assign, reason=f"Claimed via button for {ctf_name}"
-            )
-            await inter.response.send_message(
-                f"✅ You have been given the **{ctf_name}** role!", ephemeral=True
-            )
-        except disnake.Forbidden:
-            await inter.response.send_message(
-                "❌ I don't have permission to assign roles.", ephemeral=True
-            )
-        except Exception as e:
-            await inter.response.send_message(
-                f"❌ An error occurred: {e}", ephemeral=True
-            )
-
-    @commands.Cog.listener()
-    async def on_thread_update(self, before: disnake.Thread, after: disnake.Thread):
-        """This listener is now empty as the button disabling is handled by a background task."""
-        pass
-
-
-def setup(bot):
-    bot.add_cog(CTFSheet(bot))
             await inter.author.add_roles(
                 role_to_assign, reason=f"Claimed via button for {ctf_name}"
             )

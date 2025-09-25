@@ -10,6 +10,8 @@ from typing import List, Optional
 import asyncpg
 from dotenv import load_dotenv
 
+from Modules import log  # Import the logger module
+
 load_dotenv()
 
 
@@ -31,14 +33,14 @@ class Database:
         """Get timestamp of the most recent DM in the database"""
         if not cls.conn:
             print("Database not initialized")
-            return datetime.min.replace(tzinfo=timezone.utc)
+            return None
 
         query = """
             SELECT timestamp
             FROM dm_logs
             ORDER BY timestamp DESC
             LIMIT 1
-        """
+            """
         try:
             timestamp = await cls.conn.fetchval(query)
             return timestamp if timestamp else datetime.min.replace(tzinfo=timezone.utc)
@@ -47,7 +49,7 @@ class Database:
             return datetime.min.replace(tzinfo=timezone.utc)
 
     @classmethod
-    async def init(cls):
+    async def init(cls) -> bool:
         """Initialize the database connection and tables"""
         if not cls._is_postgres_installed():
             raise RuntimeError(
@@ -68,6 +70,7 @@ class Database:
         db_password = os.getenv("DB_PASSWORD", "themcbot")
         db_name = os.getenv("DB_NAME", "themcbot")
         db_host = os.getenv("DB_HOST", "localhost")
+        max_tries = 3
 
         tries = 0
         max_tries = 3
@@ -414,7 +417,7 @@ class Database:
         """
         try:
             rows = await cls.conn.fetch(query, limit)
-            return [
+            result = [
                 {
                     "timestamp": row["timestamp"],
                     "username": row["username"],
@@ -424,6 +427,8 @@ class Database:
                 for row in rows
             ]
         except Exception as e:
+            # Log the error using the logger
+            log.log(text=f"Failed to get recent DMs: {e}", color=0xFF0000, type="ERROR")
             print(f"Failed to get recent DMs: {e}")
             return []
 
@@ -502,6 +507,16 @@ class Database:
             return False
 
     @classmethod
+    async def get_them_counter(cls) -> int:
+        """Get the current value of the 'them' counter"""
+        query = "SELECT value FROM counters WHERE name = 'them_counter'"
+        try:
+            value = await cls.conn.fetchval(query)
+            return value or 0
+        except Exception as e:
+            print(f"Failed to get them counter: {e}")
+            return 0
+
     async def get_them_counter(cls) -> int:
         """Get the current value of the 'them' counter"""
         query = "SELECT value FROM counters WHERE name = 'them_counter'"

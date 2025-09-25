@@ -172,9 +172,7 @@ class Logger:
                     call_text = text or self.default_text
                 else:
                     if args or kwargs:
-                        call_text = (
-                            f"**/{func.__name__}** was ran with the context: {args}"
-                        )
+                        call_text = f"**/{func.__name__}** was ran with the context: {args}, {kwargs}"
                     else:
                         call_text = f"**/{func.__name__}** was ran"
 
