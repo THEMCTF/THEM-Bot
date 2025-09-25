@@ -268,18 +268,11 @@ class Database:
                 has_attachments BOOLEAN DEFAULT FALSE,
                 attachment_count INTEGER DEFAULT 0
             );
-            
-            CREATE TABLE IF NOT EXISTS changelog_subscribers (
-                user_id BIGINT PRIMARY KEY
-            );
         """
         try:
             await cls.conn.execute(query)
         except Exception as e:
             print(f"Failed to create dm_logs table: {e}")
-            raise
-
-            print(f"Failed to create changelog_history table: {e}")
             raise
 
     @classmethod
