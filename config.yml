@@ -22,6 +22,16 @@ logging_channel: 1382763558000918577
 enable_channel_logging: true
 rendition: 0
 
+# CTF stuff
+ctf_player_roles:
+  - 1382763556642099243
+  - 1394040752937369640
+
+admin_user_ids:
+  - 733839959009525761
+  - 860215950866645023
+  - 949621988719202306
+
 # Rate limiting (in seconds)
 cooldowns:
   default: 60  # Default cooldown if not specified

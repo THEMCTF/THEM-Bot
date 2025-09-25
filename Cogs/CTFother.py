@@ -3,14 +3,29 @@ import os
 import subprocess
 
 import disnake
-from disnake import TextInputStyle
-from disnake.ext import commands
+import yaml
+from disnake import TextInputStyle, ui
+from disnake.ext import commands, tasks
 from disnake.ui import Modal, StringSelect, TextInput, View
 
 from Modules import log
+from Modules.CooldownManager import dynamic_cooldown
 from Modules.Logger import Logger
 
-# global ctf_end_time
+# --- Configuration Loading ---
+current_dir = os.path.dirname(os.path.abspath(__file__))
+config_path = os.path.join(current_dir, "..", "config.yml")
+config_path = os.path.normpath(config_path)
+
+with open(config_path, "r") as f:
+    config = yaml.safe_load(f)
+    ANNOUNCEMENT_CHANNEL_ID = config.get("announcements")
+    CTF_PLAYER_ROLES = config.get("ctf_player_roles", [])
+    ADMIN_USER_IDS = config.get("admin_user_ids", [])
+
+# --- In-memory storage for active CTF buttons ---
+# { "ctf_name": {"message_id": int, "channel_id": int, "end_time": datetime} }
+active_ctf_buttons = {}
 
 
 # Create a separate view for the select component
@@ -85,8 +100,32 @@ class CTFModal(disnake.ui.Modal):
                 label="Website URL",
                 custom_id="website",
                 style=disnake.TextInputStyle.short,
-                required=False,
+                required=True,
                 placeholder="https://ctf.example.com",
+                max_length=200,
+            ),
+            TextInput(
+                label="Team name",
+                custom_id="teamname",
+                style=disnake.TextInputStyle.short,
+                required=True,
+                placeholder="THEM?!",
+                max_length=200,
+            ),
+            TextInput(
+                label="Password",
+                custom_id="password",
+                style=disnake.TextInputStyle.short,
+                required=False,
+                placeholder="v3rY-S3cur3-Pa55w0rd",
+                max_length=200,
+            ),
+            TextInput(
+                label="Discord",
+                custom_id="discord",
+                style=disnake.TextInputStyle.short,
+                required=False,
+                placeholder="discord.gg/themctf",
                 max_length=200,
             ),
         ]
@@ -121,8 +160,6 @@ class CTFModal(disnake.ui.Modal):
                         "❌ End time must be after start time.", ephemeral=True
                     )
                     return
-                global ctf_end_time
-                ctf_end_time = end_time
             except ValueError:
                 await inter.response.send_message(
                     "❌ Invalid date format. Please use YYYY-MM-DD HH:MM (UTC).",
@@ -180,6 +217,11 @@ class CTFModal(disnake.ui.Modal):
                     guild=inter.guild,
                     channel_name=f"{ctf_name}-forum",
                     tags=[{"name": cat} for cat in all_categories],
+                    # Pass CTF details to create the info thread
+                    website=website,
+                    start_time=start_time,
+                    end_time=end_time,
+                    # ---
                     perms={
                         inter.guild.default_role: disnake.PermissionOverwrite(
                             view_channel=False
@@ -194,10 +236,40 @@ class CTFModal(disnake.ui.Modal):
 
             await inter.response.send_message(embed=embed, ephemeral=True)
 
+            # Send the role button to the announcement channel
+            announcement_channel = inter.guild.get_channel(ANNOUNCEMENT_CHANNEL_ID)
+            if announcement_channel:
+                view = GetRoleView(ctf_name=ctf_name, player_roles=CTF_PLAYER_ROLES)
+                button_embed = disnake.Embed(
+                    title=f"Join {ctf_name}",
+                    description=f"Click the button below to get the role for **{ctf_name}** and access the channels.\n"
+                    "You must have a player role to do this.",
+                    color=disnake.Color.blurple(),
+                )
+                message = await announcement_channel.send(embed=button_embed, view=view)
+
+                # Store button info for auto-disabling
+                end_time_dt = datetime.datetime.fromtimestamp(
+                    end_time, tz=datetime.timezone.utc
+                )
+                active_ctf_buttons[ctf_name] = {
+                    "message_id": message.id,
+                    "channel_id": announcement_channel.id,
+                    "end_time": end_time_dt,
+                }
+
+            else:
+                print(
+                    f"Could not find announcement channel with ID {ANNOUNCEMENT_CHANNEL_ID}"
+                )
+
             # Log the CTF registration (assuming Logger is properly set up)
             try:
-                Logger.info(
-                    f"CTF registered: {ctf_name} by {inter.author} ({inter.author.id})"
+                await Logger.log_action(
+                    self,
+                    text=f"CTF registered: {ctf_name} by {inter.author} ({inter.author.id})",
+                    color=disnake.Color.blue(),
+                    type="CTF Registration",
                 )
             except Exception as e:
                 print(f"Logging error: {e}")
@@ -210,73 +282,122 @@ class CTFModal(disnake.ui.Modal):
             print(f"Modal callback error: {e}")
 
 
+class GetRoleView(disnake.ui.View):
+    """A view with a button to claim a CTF role."""
+
+    def __init__(self, ctf_name: str, player_roles: list, timeout=None):
+        # Use a very long timeout; we will manage disabling it manually.
+        super().__init__(timeout=timeout or 60 * 60 * 24 * 28)  # 28 days
+        self.ctf_name = ctf_name
+        self.player_roles = set(player_roles)
+        self.add_item(
+            ui.Button(
+                label=f"Claim {ctf_name} Role",
+                style=disnake.ButtonStyle.green,
+                custom_id=f"get_ctf_role:{ctf_name}",
+            )
+        )
+
+
+async def can_use_backup_command(ctx: commands.Context) -> bool:
+    """Check if the user is an admin defined in the config."""
+    return ctx.author.id in ADMIN_USER_IDS
+
+
+def user_has_required_role(
+    inter: disnake.MessageInteraction, required_roles: set
+) -> bool:
+    """Check if the interacting user has one of the required roles."""
+    if not isinstance(inter.author, disnake.Member):
+        return False
+    user_role_ids = {role.id for role in inter.author.roles}
+    return not user_role_ids.isdisjoint(required_roles)
+
+
+@commands.command(name="sendrolebutton", hidden=True)
+@commands.check(can_use_backup_command)
+async def send_role_button_command(ctx: commands.Context, *, ctf_name: str):
+    """
+    Manually sends the 'Get Role' button for a CTF.
+    Usage: !sendrolebutton <CTF Name with year>
+    """
+    if not ctf_name:
+        await ctx.send("Please provide a CTF name.", delete_after=10)
+        return
+
+    role = disnake.utils.get(ctx.guild.roles, name=ctf_name)
+    if not role:
+        await ctx.send(f"Role `{ctf_name}` not found.", delete_after=10)
+        return
+
+    view = GetRoleView(ctf_name=ctf_name, player_roles=CTF_PLAYER_ROLES)
+    embed = disnake.Embed(
+        title=f"Get the {ctf_name} Role!",
+        description=f"Click the button below to get the role for **{ctf_name}** and access the channels.\n"
+        "You must have a player role to do this.",
+        color=disnake.Color.blurple(),
+    )
+    await ctx.send(embed=embed, view=view)
+    await ctx.message.delete()
+
+
 class CTFSheet(commands.Cog):
     """Main cog for CTF management commands."""
 
     def __init__(self, bot):
         """Initialize the CTF cog."""
         self.bot = bot
+        self.bot.add_command(send_role_button_command)
+        self.check_ended_ctfs.start()
 
-    # --- Slash Commands ---
-    @log(text="Update command was used", color=0x00FF00)
-    @commands.slash_command(
-        name="update",
-        description="update the google sheet.",
-        default_member_permissions=disnake.Permissions(moderate_members=True),
-    )
-    @commands.cooldown(
-        1, 300, commands.BucketType.guild
-    )  # 1 use per 5 minutes per server
-    async def update(self, inter: disnake.ApplicationCommandInteraction):
-        """Update the Google sheet by running the external script."""
-        await inter.response.defer(
-            with_message="Running, this might take a second", ephemeral=False
-        )
+    def cog_unload(self):
+        """Stop the background task when the cog is unloaded."""
+        self.check_ended_ctfs.cancel()
 
-        try:
-            # Save current directory
-            original_dir = os.getcwd()
-            os.chdir("../Project-Onjer")
+    @tasks.loop(minutes=10)
+    async def check_ended_ctfs(self):
+        """Periodically check for and disable buttons for ended CTFs."""
+        now = datetime.datetime.now(datetime.timezone.utc)
+        ended_ctfs = []
 
-            try:
-                process = subprocess.run(
-                    ["python3", "main.py"],
-                    capture_output=True,
-                    text=True,
-                )
+        for ctf_name, data in active_ctf_buttons.items():
+            if now >= data["end_time"]:
+                try:
+                    channel = self.bot.get_channel(
+                        data["channel_id"]
+                    ) or await self.bot.fetch_channel(data["channel_id"])
+                    message = await channel.fetch_message(data["message_id"])
 
-                response = (
-                    process.stdout
-                    if process.returncode == 0
-                    else f"Error running script:\n{process.stderr}"
-                )
-                success = process.returncode == 0
-            except Exception as e:
-                response = (
-                    f"Exception while running script:\n{type(e).__name__}: {str(e)}"
-                )
-                success = False
+                    # Create a new view with a disabled button
+                    disabled_view = ui.View()
+                    disabled_view.add_item(
+                        ui.Button(
+                            label=f"{ctf_name} (Ended)",
+                            style=disnake.ButtonStyle.grey,
+                            disabled=True,
+                        )
+                    )
 
-            os.chdir(original_dir)
+                    # Update the original message
+                    await message.edit(view=disabled_view)
+                    print(f"Disabled role button for ended CTF: {ctf_name}")
+                    ended_ctfs.append(ctf_name)
 
-        except Exception as e:
-            response = f"Directory Error:\n{type(e).__name__}: {str(e)}"
-            success = False
+                except disnake.NotFound:
+                    print(
+                        f"Message for CTF '{ctf_name}' not found. Removing from active list."
+                    )
+                    ended_ctfs.append(ctf_name)
+                except Exception as e:
+                    print(f"Error disabling button for CTF '{ctf_name}': {e}")
 
-        embed = disnake.Embed(
-            title="Sheet updated" if success else "An error was encountered",
-            description=response,
-            color=disnake.Colour.green() if success else disnake.Colour.red(),
-        )
+        # Clean up ended CTFs from the dictionary
+        for ctf_name in ended_ctfs:
+            active_ctf_buttons.pop(ctf_name, None)
 
-        await inter.edit_original_message(embed=embed)
-        await Logger.log_action(
-            self,
-            text=f"**/update** was ran {'successfully' if success else 'with errors'}",
-            color=disnake.Colour.green() if success else disnake.Colour.red(),
-            type="CTFSheet",
-            user=inter.author,
-        )
+    @check_ended_ctfs.before_loop
+    async def before_check_ended_ctfs(self):
+        await self.bot.wait_until_ready()
 
     @log(text="CTF registration started", color=0x00FF00)
     @commands.slash_command(
@@ -394,7 +515,14 @@ class CTFSheet(commands.Cog):
 
     @staticmethod
     async def make_forum_channel(
-        guild: disnake.Guild, channel_name: str, tags: list[dict], perms: dict
+        guild: disnake.Guild,
+        channel_name: str,
+        tags: list[dict],
+        perms: dict,
+        website: str,
+        start_time: int,
+        end_time: int,
+        require_tag: bool = True,
     ):
         """
         Create a forum channel with specified name, tags, and permissions.
@@ -404,6 +532,10 @@ class CTFSheet(commands.Cog):
             channel_name: Name of the forum channel
             tags: List of tag dictionaries with 'name' and optionally 'emoji' keys
             perms: Dictionary mapping role IDs/role objects to permission overwrites
+            website: The URL for the CTF website.
+            start_time: The UNIX timestamp for the CTF start time.
+            end_time: The UNIX timestamp for the CTF end time.
+            require_tag: Whether to require a tag when creating a post.
         """
 
         try:
@@ -414,6 +546,10 @@ class CTFSheet(commands.Cog):
                 position=1,
                 category=1382763557816500226,
             )
+
+            # Set the require_tag flag
+            flags = disnake.ChannelFlags(require_tag=require_tag)
+            await forum_channel.edit(flags=flags)
 
             # Create forum tags
             forum_tags = []
@@ -438,6 +574,40 @@ class CTFSheet(commands.Cog):
             if forum_tags:
                 await forum_channel.edit(available_tags=forum_tags)
 
+            # Create the "Information" thread
+            info_embed = disnake.Embed(
+                title="CTF Information",
+                color=disnake.Color.dark_teal(),
+            )
+            if website:
+                info_embed.add_field(name="🌐 Website", value=website, inline=False)
+
+            info_embed.add_field(
+                name="⏰ Start Time", value=f"<t:{start_time}:F>", inline=True
+            )
+            info_embed.add_field(
+                name="⏰ End Time", value=f"<t:{end_time}:F>", inline=True
+            )
+            info_embed.add_field(
+                name="📊 Google Sheet", value="*Coming soon...*", inline=False
+            )
+
+            # Create a view with a placeholder calendar button
+            calendar_view = disnake.ui.View()
+            calendar_view.add_item(
+                disnake.ui.Button(
+                    label="Add to Calendar",
+                    style=disnake.ButtonStyle.secondary,
+                    disabled=True,
+                )
+            )
+
+            # Create, pin, and lock the thread
+            thread = await forum_channel.create_thread(
+                name="Information", embed=info_embed, view=calendar_view
+            )
+            await thread.edit(pinned=True, locked=True)
+
             print(
                 f"Created forum channel: {forum_channel.name} with {len(forum_tags)} tags"
             )
@@ -447,78 +617,58 @@ class CTFSheet(commands.Cog):
             print(f"Error creating forum channel: {e}")
             return None
 
-    # TODO: actually just make it send a button in the channel that will check if users have one of the roles that in defined in the config.yml, and only send this button after a ctf has been registered and a message was sent in annoucments containing that ctf name, make it have a cooldown of a day. Also make a backup prefix command that can only be used by user ids definded in the config that will send the button.
-    @commands.Cog.listener()
-    async def auto_assign_role(self, thread: disnake.Thread):
-        """Auto-assign CTF role based on thread name."""
+    @commands.Cog.listener("on_button_click")
+    @dynamic_cooldown(commands.Cooldown(1, 86400), commands.BucketType.user)
+    async def handle_get_role_button(self, inter: disnake.MessageInteraction):
+        """Handle the 'Get Role' button click."""
+        custom_id = inter.component.custom_id
+        if not custom_id or not custom_id.startswith("get_ctf_role:"):
+            return
+
+        ctf_name = custom_id.split(":", 1)[1]
+
+        if not user_has_required_role(inter, set(CTF_PLAYER_ROLES)):
+            await inter.response.send_message(
+                "❌ You don't have the required role to claim this CTF role.",
+                ephemeral=True,
+            )
+            # Reset cooldown if check fails
+            inter.application_command.reset_cooldown(inter)
+            return
+
+        role_to_assign = disnake.utils.get(inter.guild.roles, name=ctf_name)
+        if not role_to_assign:
+            await inter.response.send_message(
+                f"❌ The role `{ctf_name}` could not be found.", ephemeral=True
+            )
+            return
+
+        if role_to_assign in inter.author.roles:
+            await inter.response.send_message(
+                "✅ You already have this role.", ephemeral=True
+            )
+            return
+
         try:
-            # Check if the thread is in the designated channel (replace with your channel ID)
-            designated_channel_id = 1382763557640470615
-            if thread.parent_id != designated_channel_id:
-                return
-
-            # Check if the thread is recent
-            # just check if it's been made in the past week and contains the ctf name
-            if (datetime.datetime.utcnow() - thread.created_at).days > 7:
-                return
-            ctf_name = thread.name.split(" - ")[0].strip()
-
-            # Find the corresponding role in the guild
-            role = disnake.utils.get(thread.guild.roles, name=ctf_name)
-            if not role:
-                print(f"No role found for CTF: {ctf_name}")
-                return
-
-            # Assign the role to all members who have posted in the thread
-            async for message in thread.history(limit=None):
-                member = message.author
-                if isinstance(member, disnake.Member) and role not in member.roles:
-                    await member.add_roles(role)
-                    print(f"Assigned role '{role.name}' to {member.display_name}")
-
+            await inter.author.add_roles(
+                role_to_assign, reason=f"Claimed via button for {ctf_name}"
+            )
+            await inter.response.send_message(
+                f"✅ You have been given the **{ctf_name}** role!", ephemeral=True
+            )
+        except disnake.Forbidden:
+            await inter.response.send_message(
+                "❌ I don't have permission to assign roles.", ephemeral=True
+            )
         except Exception as e:
-            print(f"Error in auto_assign_role: {e}")
+            await inter.response.send_message(
+                f"❌ An error occurred: {e}", ephemeral=True
+            )
 
     @commands.Cog.listener()
     async def on_thread_update(self, before: disnake.Thread, after: disnake.Thread):
-        """Move forum and channel to 'Archive' category if the CTF has ended."""
-        # Check if the thread was just closed
-        if before.archived == False and after.archived == True:
-            return  # We only care about threads being archived
-
-        # Check if the CTF has ended
-        ctf_end_time = getattr(after, "ctf_end_time", None)
-        if ctf_end_time and ctf_end_time < datetime.datetime.utcnow():
-            text_channel = disnake.utils.get(
-                after.guild.text_channels, name=after.name.lower().replace(" - ", "-")
-            )
-            if text_channel:
-                ended_category = disnake.utils.get(
-                    after.guild.categories, id=1385002767382347776
-                )
-                if ended_category:
-                    # also make it so the text channel is position 0 and the forum is position 1
-                    await text_channel.edit(category=ended_category)
-                    print(f"Moved channel '{text_channel.name}' to 'Archive' category")
-            # get the forum channel
-            forum_channel = disnake.utils.get(
-                after.guild.forum_channels,
-                name=after.name.lower().replace(" - ", "-") + "-forum",
-            )
-            if forum_channel:
-                ended_category = disnake.utils.get(
-                    after.guild.categories, id=1385002767382347776
-                )
-                if ended_category:
-                    # also make it so the text channel is position 0 and the forum is position 1
-                    await forum_channel.edit(category=ended_category)
-                    print(f"Moved forum '{forum_channel.name}' to 'Archive' category")
-            await text_channel.set_permissions(
-                after.guild.default_role, view_channel=True
-            )
-            await forum_channel.set_permissions(
-                after.guild.default_role, view_channel=True
-            )
+        """This listener is now empty as the button disabling is handled by a background task."""
+        pass
 
 
 def setup(bot):
