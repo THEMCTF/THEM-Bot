@@ -39,15 +39,13 @@ class GeneralCog(commands.Cog):
         seconds = int(uptime % 60)
         uptime_str = f"{days}d {hours}h {minutes}m {seconds}s"
 
-        # Create embeds for different sections
-        status_embed = disnake.Embed(title="Bot Status", color=disnake.Color.green())
-        status_embed.add_field(
-            name="API Latency", value=f"{api_latency}ms", inline=True
-        )
-        status_embed.add_field(
-            name="WebSocket Latency", value=f"{websocket_latency}ms", inline=True
-        )
-        status_embed.add_field(name="Uptime", value=uptime_str, inline=False)
+        # Create the container
+        container = f"""
+        **Bot Status**
+        API Latency: {api_latency}ms
+        WebSocket Latency: {websocket_latency}ms
+        Uptime: {uptime_str}
+        """
 
         # Add refresh button
         refresh_button = disnake.ui.Button(
@@ -55,8 +53,8 @@ class GeneralCog(commands.Cog):
         )
         container.add_item(refresh_button)
 
-        # Send initial message with embed and button
-        await inter.followup.send(embed=status_embed, view=container)
+        # Send initial message with container and button
+        await inter.followup.send(container, view=container)
 
     @commands.Cog.listener("on_button_click")
     async def ping_button_handler(self, inter: disnake.MessageInteraction):
@@ -75,18 +73,16 @@ class GeneralCog(commands.Cog):
         seconds = int(uptime % 60)
         uptime_str = f"{days}d {hours}h {minutes}m {seconds}s"
 
-        # Update embed
-        status_embed = disnake.Embed(title="Bot Status", color=disnake.Color.green())
-        status_embed.add_field(
-            name="API Latency", value=f"{api_latency}ms", inline=True
-        )
-        status_embed.add_field(
-            name="WebSocket Latency", value=f"{websocket_latency}ms", inline=True
-        )
-        status_embed.add_field(name="Uptime", value=uptime_str, inline=False)
+        # Update container
+        container = f"""
+        **Bot Status**
+        API Latency: {api_latency}ms
+        WebSocket Latency: {websocket_latency}ms
+        Uptime: {uptime_str}
+        """
 
-        # Update message with new embed
-        await inter.response.edit_message(embed=status_embed)
+        # Update message with new container
+        await inter.response.edit_message(container)
 
     @log(text="Gif command was used", color=0xFF0000)
     @commands.slash_command(name="gif", description="gif.")

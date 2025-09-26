@@ -1,0 +1,74 @@
+[
+    {
+        "updateCells": {
+            "rows": [{"values": [{"userEnteredValue": {"stringValue": "Challenges"}}]}],
+            "start": {"sheetId": "{challenges_sheet_id}", "rowIndex": 0, "columnIndex": 0},
+            "fields": "userEnteredValue"
+        }
+    },
+    {
+        "updateCells": {
+            "rows": [{"values": [{"userEnteredValue": {"stringValue": "Category"}}, {"userEnteredValue": {"stringValue": "Challenge Name"}}, {"userEnteredValue": {"stringValue": "Challenge Description"}}, {"userEnteredValue": {"stringValue": "Who takes it on?"}}, {"userEnteredValue": {"stringValue": "Status"}}, {"userEnteredValue": {"stringValue": "🩸"}}, {"userEnteredValue": {"stringValue": "Note"}}]}],
+            "start": {"sheetId": "{challenges_sheet_id}", "rowIndex": 2, "columnIndex": 0},
+            "fields": "userEnteredValue"
+        }
+    },
+    {
+        "setDataValidation": {
+            "range": {
+                "sheetId": "{challenges_sheet_id}",
+                "startRowIndex": 3,
+                "endRowIndex": 100,
+                "startColumnIndex": 4,
+                "endColumnIndex": 5
+            },
+            "rule": {
+                "condition": {
+                    "type": "ONE_OF_LIST",
+                    "values": [
+                        {"userEnteredValue": "Started"},
+                        {"userEnteredValue": "NEED HELP!!!"},
+                        {"userEnteredValue": "Finished"}
+                    ]
+                },
+                "showCustomUi": true
+            }
+        }
+    },
+    {
+        "addConditionalFormatRule": {
+            "rule": {
+                "ranges": [{"sheetId": "{challenges_sheet_id}", "startRowIndex": 3, "endRowIndex": 100, "startColumnIndex": 4, "endColumnIndex": 5}],
+                "booleanRule": {
+                    "condition": {"type": "TEXT_EQ", "values": [{"userEnteredValue": "Started"}]},
+                    "format": {"backgroundColor": {"red": 1, "green": 1, "blue": 0}}
+                }
+            },
+            "index": 0
+        }
+    },
+    {
+        "addConditionalFormatRule": {
+            "rule": {
+                "ranges": [{"sheetId": "{challenges_sheet_id}", "startRowIndex": 3, "endRowIndex": 100, "startColumnIndex": 4, "endColumnIndex": 5}],
+                "booleanRule": {
+                    "condition": {"type": "TEXT_EQ", "values": [{"userEnteredValue": "NEED HELP!!!"}]},
+                    "format": {"backgroundColor": {"red": 1, "green": 0, "blue": 0}}
+                }
+            },
+            "index": 1
+        }
+    },
+    {
+        "addConditionalFormatRule": {
+            "rule": {
+                "ranges": [{"sheetId": "{challenges_sheet_id}", "startRowIndex": 3, "endRowIndex": 100, "startColumnIndex": 4, "endColumnIndex": 5}],
+                "booleanRule": {
+                    "condition": {"type": "TEXT_EQ", "values": [{"userEnteredValue": "Finished"}]},
+                    "format": {"backgroundColor": {"red": 0, "green": 1, "blue": 0}}
+                }
+            },
+            "index": 2
+        }
+    }
+]

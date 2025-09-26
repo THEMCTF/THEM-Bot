@@ -1,12 +1,16 @@
 import asyncio
 import datetime
+import json
 import os
 import subprocess
 
 import disnake
+import google.auth
 import yaml
 from disnake import TextInputStyle
 from disnake.ext import commands, tasks
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
 from Modules import log
 from Modules.CooldownManager import dynamic_cooldown
@@ -249,6 +253,11 @@ class CTFModalPart2(disnake.ui.Modal):
 
             # Combine selected types with additional categories
             all_categories = self.selected_types + additional_categories
+
+            if not sheet_url:
+                sheet_id = SheetSetup.createSheet(ctf_name, all_categories)
+                if sheet_id:
+                    sheet_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}"
 
             # Create response embed
             embed = disnake.Embed(
@@ -852,6 +861,164 @@ class CTFSheet(commands.Cog):
                     int(data["end_time"].timestamp()),
                 )
                 await Database.remove_pending_announcement(ctf_name_input)
+
+
+class SheetSetup:
+    def createSheet(title, categories):
+        creds, _ = google.auth.default()
+        try:
+            service = build("sheets", "v4", credentials=creds)
+            spreadsheet = {"properties": {"title": title}}
+            spreadsheet = (
+                service.spreadsheets()
+                .create(body=spreadsheet, fields="spreadsheetId,sheets")
+                .execute()
+            )
+            spreadsheet_id = spreadsheet.get("spreadsheetId")
+            participants_sheet_id = (
+                spreadsheet.get("sheets")[0].get("properties").get("sheetId")
+            )
+
+            requests = [
+                # Rename sheet 1 to "Participants"
+                {
+                    "updateSheetProperties": {
+                        "properties": {
+                            "sheetId": participants_sheet_id,
+                            "title": "Participants",
+                        },
+                        "fields": "title",
+                    }
+                },
+                # Add and format title for Participants sheet
+                {
+                    "updateCells": {
+                        "rows": [
+                            {
+                                "values": [
+                                    {
+                                        "userEnteredValue": {
+                                            "stringValue": f"Participants {title}"
+                                        },
+                                        "userEnteredFormat": {
+                                            "textFormat": {"fontSize": 14, "bold": True}
+                                        },
+                                    }
+                                ]
+                            }
+                        ],
+                        "start": {
+                            "sheetId": participants_sheet_id,
+                            "rowIndex": 0,
+                            "columnIndex": 0,
+                        },
+                        "fields": "userEnteredValue,userEnteredFormat.textFormat",
+                    }
+                },
+                # Add header for Participants sheet
+                {
+                    "updateCells": {
+                        "rows": [
+                            {
+                                "values": [
+                                    {
+                                        "userEnteredValue": {
+                                            "stringValue": "Participant name (use dc user)"
+                                        }
+                                    },
+                                    {"userEnteredValue": {"stringValue": "Skill"}},
+                                    {"userEnteredValue": {"stringValue": "Note"}},
+                                ]
+                            }
+                        ],
+                        "start": {
+                            "sheetId": participants_sheet_id,
+                            "rowIndex": 1,
+                            "columnIndex": 0,
+                        },
+                        "fields": "userEnteredValue",
+                    }
+                },
+                # Add data validation for Skills
+                {
+                    "setDataValidation": {
+                        "range": {
+                            "sheetId": participants_sheet_id,
+                            "startRowIndex": 2,
+                            "endRowIndex": 100,
+                            "startColumnIndex": 1,
+                            "endColumnIndex": 2,
+                        },
+                        "rule": {
+                            "condition": {
+                                "type": "ONE_OF_LIST",
+                                "values": [
+                                    {"userEnteredValue": cat} for cat in categories
+                                ],
+                            },
+                            "showCustomUi": True,
+                        },
+                    }
+                },
+                # Add new sheet for "Challenges"
+                {"addSheet": {"properties": {"title": "Challenges"}}},
+            ]
+
+            # Execute first batch
+            response = (
+                service.spreadsheets()
+                .batchUpdate(spreadsheetId=spreadsheet_id, body={"requests": requests})
+                .execute()
+            )
+
+            challenges_sheet_id = response["replies"][4]["addSheet"]["properties"][
+                "sheetId"
+            ]
+
+            # Load requests from JSON file
+            with open(
+                os.path.join(current_dir, "..", "data", "setupbasic.json"), "r"
+            ) as f:
+                requests_challenges_str = f.read()
+
+            requests_challenges_str = requests_challenges_str.replace(
+                "{challenges_sheet_id}", str(challenges_sheet_id)
+            )
+            requests_challenges = json.loads(requests_challenges_str)
+
+            # Add dynamic data validation for Category
+            requests_challenges.append(
+                {
+                    "setDataValidation": {
+                        "range": {
+                            "sheetId": challenges_sheet_id,
+                            "startRowIndex": 3,
+                            "endRowIndex": 100,
+                            "startColumnIndex": 0,
+                            "endColumnIndex": 1,
+                        },
+                        "rule": {
+                            "condition": {
+                                "type": "ONE_OF_LIST",
+                                "values": [
+                                    {"userEnteredValue": cat} for cat in categories
+                                ],
+                            },
+                            "showCustomUi": True,
+                        },
+                    }
+                }
+            )
+
+            service.spreadsheets().batchUpdate(
+                spreadsheetId=spreadsheet_id, body={"requests": requests_challenges}
+            ).execute()
+
+            print("Sheet created and formatted.")
+            return spreadsheet_id
+        except HttpError as error:
+            print(f"An error occurred: {error}")
+            return None
 
 
 def setup(bot):
