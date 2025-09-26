@@ -1,4 +1,4 @@
-# THEM Bot
+# THEM?! Bot
 
 A Discord bot for the THEM CTF community, providing CTF-focused features and community management tools.
 
@@ -85,3 +85,5 @@ bot/
 ## License
 
 MIT License - See LICENSE file for details
+
+README is written by AI, contact @Starry0Wolf for more info.
