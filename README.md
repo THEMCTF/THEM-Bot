@@ -1,13 +1,11 @@
 # THEM?! Bot
 
-A Discord bot for the THEM CTF community, providing CTF-focused features and community management tools.
+A Discord bot made for THEM?!, providing CTF-focused features and management tools.
 
 ## Features
 
 - CTF team management tools
 - Challenge tracking
-- Community engagement features
-- Automated changelog monitoring
 - Moderation utilities
 - Configurable logging system
 
@@ -32,7 +30,7 @@ A Discord bot for the THEM CTF community, providing CTF-focused features and com
 
 ## Development
 
-We use modern Python development tools for quality code:
+We use development tools for quality code:
 
 - **Code Formatting**: `black`
   ```bash
@@ -58,12 +56,6 @@ logging_channel: LOGGING_CHANNEL_ID
 enable_channel_logging: true
 ```
 
-## Commands
-
-- `/ping` - Check bot status and latency
-- `/changelog` - View and subscribe to changelog updates
-- `/help` - List all available commands
-
 ## Contributing
 
 1. Fork the repository
@@ -71,7 +63,7 @@ enable_channel_logging: true
 3. Run `black` and `isort` on your changes
 4. Submit a pull request
 
-## File Structure
+## (basic) File Structure
 
 ```
 bot/
