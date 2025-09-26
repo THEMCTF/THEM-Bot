@@ -255,30 +255,41 @@ class Logger:
             return sync_wrapper
 
 
+class LoggerProxy:
+    """A proxy to the global logger instance that allows for late initialization."""
+
+    def __call__(self, *args, **kwargs):
+        if _logger is None:
+            raise RuntimeError(
+                "Logger has not been initialized. Call setup_logger() first."
+            )
+        return _logger(*args, **kwargs)
+
+    def __getattr__(self, name):
+        if _logger is None:
+            raise RuntimeError(
+                "Logger has not been initialized. Call setup_logger() first."
+            )
+        return getattr(_logger, name)
+
+
 bot = None
-logger = None
+_logger: Logger | None = None
+logger = LoggerProxy()
 
 
 async def setup_logger(bot_instance):
-    global bot, logger
+    global bot, _logger
     bot = bot_instance
 
     # Create data directory if it doesn't exist
     data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
     os.makedirs(data_dir, exist_ok=True)
 
-    # Initialize logger
-    logger = Logger(bot_instance)
+    # Initialize the actual logger instance
+    _logger = Logger(bot_instance)
 
-    return logger
-
-
-async def log(text, color, type, priority, user):
-    """Logs a message with configurable parameters."""
-    print(
-        f"Logging: {text} with color {color}, type {type}, priority {priority}, and user {user}"
-    )
-    await logger.log(text, color, type, priority, user)
+    return _logger
 
 
 # Usage examples:

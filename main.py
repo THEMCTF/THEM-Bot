@@ -72,6 +72,10 @@ async def init_bot():
     # Initialize database first
     print("Initializing database...")
     try:
+        # Set up logger right after bot is created
+        print("Initializing logger...")
+        await setup_logger(bot)
+        print("\033[32mLogger initialized successfully\033[0m")
         await Database.init()
         if not Database.conn:
             raise Exception("Database connection not established")
@@ -128,9 +132,6 @@ async def on_ready():
     try:
         print("Initializing services...")
 
-        # Then set up logger
-        logger = await setup_logger(bot)
-
         # Ensure data directory exists
         data_dir = os.path.join(os.path.dirname(__file__), "data")
         os.makedirs(data_dir, exist_ok=True)
@@ -149,6 +150,8 @@ async def on_ready():
         print(f"\033[32m=== Bot Ready ===\n{status}\n===============\033[0m")
 
         # Log to Discord if enabled and logger is available
+        from Modules import log as logger
+
         if list_startup and logger:
             await logger.log(
                 text=f"🚀 Bot is online! Startup took {startup_time:.2f}s",

@@ -10,8 +10,6 @@ from typing import List, Optional
 import asyncpg
 from dotenv import load_dotenv
 
-from Modules import log  # Import the logger module
-
 load_dotenv()
 
 
@@ -116,6 +114,8 @@ class Database:
         await cls.create_solutions_table()
         await cls.create_counters_table()
         await cls.create_ctfs_table()
+        await cls.create_active_ctf_buttons_table()
+        await cls.create_pending_announcements_table()
 
     @staticmethod
     def _is_postgres_installed():
@@ -253,6 +253,31 @@ class Database:
                 categories TEXT[],
                 registered_by BIGINT,
                 registered_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );
+        """
+        await cls.conn.execute(query)
+
+    @classmethod
+    async def create_active_ctf_buttons_table(cls):
+        """Create the active_ctf_buttons table if it doesn't exist."""
+        query = """
+            CREATE TABLE IF NOT EXISTS active_ctf_buttons (
+                ctf_name TEXT PRIMARY KEY,
+                message_id BIGINT NOT NULL,
+                channel_id BIGINT NOT NULL,
+                end_time TIMESTAMPTZ NOT NULL
+            );
+        """
+        await cls.conn.execute(query)
+
+    @classmethod
+    async def create_pending_announcements_table(cls):
+        """Create the pending_announcements table if it doesn't exist."""
+        query = """
+            CREATE TABLE IF NOT EXISTS pending_announcements (
+                ctf_name_input TEXT PRIMARY KEY,
+                ctf_name TEXT NOT NULL,
+                end_time TIMESTAMPTZ NOT NULL
             );
         """
         await cls.conn.execute(query)
@@ -396,6 +421,86 @@ class Database:
             return False
 
     @classmethod
+    async def add_active_button(
+        cls, ctf_name: str, message_id: int, channel_id: int, end_time: datetime
+    ):
+        """Add an active CTF button to the database."""
+        query = """
+            INSERT INTO active_ctf_buttons (ctf_name, message_id, channel_id, end_time)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (ctf_name) DO UPDATE SET
+                message_id = EXCLUDED.message_id,
+                channel_id = EXCLUDED.channel_id,
+                end_time = EXCLUDED.end_time;
+        """
+        try:
+            await cls.conn.execute(query, ctf_name, message_id, channel_id, end_time)
+            return True
+        except Exception as e:
+            print(f"Failed to add active button: {e}")
+            return False
+
+    @classmethod
+    async def get_active_buttons(cls) -> List[dict]:
+        """Get all active CTF buttons from the database."""
+        query = (
+            "SELECT ctf_name, message_id, channel_id, end_time FROM active_ctf_buttons"
+        )
+        try:
+            rows = await cls.conn.fetch(query)
+            return [dict(row) for row in rows]
+        except Exception as e:
+            print(f"Failed to get active buttons: {e}")
+            return []
+
+    @classmethod
+    async def remove_active_button(cls, ctf_name: str) -> bool:
+        """Remove an active CTF button from the database."""
+        query = "DELETE FROM active_ctf_buttons WHERE ctf_name = $1"
+        try:
+            await cls.conn.execute(query, ctf_name)
+            return True
+        except Exception as e:
+            print(f"Failed to remove active button: {e}")
+            return False
+
+    @classmethod
+    async def add_pending_announcement(
+        cls, ctf_name_input: str, ctf_name: str, end_time: datetime
+    ):
+        """Add a pending announcement to the database."""
+        query = """
+            INSERT INTO pending_announcements (ctf_name_input, ctf_name, end_time)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (ctf_name_input) DO UPDATE SET
+                ctf_name = EXCLUDED.ctf_name,
+                end_time = EXCLUDED.end_time;
+        """
+        try:
+            await cls.conn.execute(query, ctf_name_input, ctf_name, end_time)
+            return True
+        except Exception as e:
+            print(f"Failed to add pending announcement: {e}")
+            return False
+
+    @classmethod
+    async def get_pending_announcements(cls) -> List[dict]:
+        """Get all pending announcements from the database."""
+        query = "SELECT ctf_name_input, ctf_name, end_time FROM pending_announcements"
+        try:
+            rows = await cls.conn.fetch(query)
+            return [dict(row) for row in rows]
+        except Exception as e:
+            print(f"Failed to get pending announcements: {e}")
+            return []
+
+    @classmethod
+    async def remove_pending_announcement(cls, ctf_name_input: str) -> bool:
+        """Remove a pending announcement from the database."""
+        query = "DELETE FROM pending_announcements WHERE ctf_name_input = $1"
+        await cls.conn.execute(query, ctf_name_input)
+
+    @classmethod
     async def get_recent_dms(cls, limit: int = 10) -> List[dict]:
         """Get recent DM logs from the database
 
@@ -427,6 +532,8 @@ class Database:
                 for row in rows
             ]
         except Exception as e:
+            from Modules import log  # Import here to avoid circular dependency
+
             # Log the error using the logger
             log.log(text=f"Failed to get recent DMs: {e}", color=0xFF0000, type="ERROR")
             print(f"Failed to get recent DMs: {e}")
