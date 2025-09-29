@@ -13,7 +13,7 @@ from googleapiclient.errors import HttpError
 
 from Modules.CooldownManager import dynamic_cooldown
 from Modules.Database import Database
-from Modules.Logger import _logger as log
+from Modules.Logger import Logger
 
 # --- Configuration Loading ---
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -413,21 +413,6 @@ class CTFModalPart2(disnake.ui.Modal):
             )
             # ---------------------------
 
-            # Log the CTF registration (assuming Logger is properly set up)
-            try:
-                await log.log(
-                    text=(
-                        f"CTF registered: {ctf_name} by {inter.author} "
-                        f"({inter.author.id})"
-                    ),
-                    color=disnake.Color.blue(),
-                    type="CTF Registration",
-                    priority=0,
-                    user=inter.author,
-                )
-            except Exception as e:
-                print(f"Logging error: {e}")
-
         except Exception as e:
             await inter.response.send_message(
                 f"❌ An error occurred while processing your CTF registration: {str(e)}",
@@ -755,12 +740,12 @@ class CTFSheet(commands.Cog):
     async def before_check_ended_ctfs(self):
         await self.bot.wait_until_ready()
 
-    @log(text="CTF registration started", color=0x00FF00)
     @commands.slash_command(
         name="register_ctf",
         description="Register a new CTF competition",
         default_member_permissions=disnake.Permissions(moderate_members=True),
     )
+    @Logger
     @commands.cooldown(1, 30, commands.BucketType.user)  # 1 use per 30 seconds per user
     async def register_ctf(self, inter: disnake.ApplicationCommandInteraction):
         """Start the CTF registration process with challenge type selection."""
@@ -826,8 +811,8 @@ class CTFSheet(commands.Cog):
     @commands.slash_command(
         name="sendrolebutton", hidden=True, default_member_permissions="manage_members"
     )
+    @Logger
     @commands.check(can_use_backup_command)
-    @log()
     async def send_role_button_command(
         self, inter: disnake.ApplicationCommandInteraction, *, ctf_name: str
     ):

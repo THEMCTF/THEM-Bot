@@ -8,8 +8,6 @@ import yaml
 from disnake.ext import commands
 from dotenv import load_dotenv
 
-from Modules.Logger import Logger, setup_logger
-
 photo = """\033[32m hi\033[0m"""
 
 print(photo)
@@ -71,18 +69,6 @@ async def init_bot():
 
     # Initialize database first
     print("Initializing database...")
-    try:
-        # Set up logger right after bot is created
-        print("Initializing logger...")
-        await setup_logger(bot)
-        print("\033[32mLogger initialized successfully\033[0m")
-        await Database.init()
-        if not Database.conn:
-            raise Exception("Database connection not established")
-        print("\033[32mDatabase initialized successfully\033[0m")
-    except Exception as e:
-        print(f"\033[31mFailed to initialize database: {e}\033[0m")
-        sys.exit(1)
 
     # Then load cogs
     await load_cogs()
@@ -148,16 +134,6 @@ async def on_ready():
 
         # Log to console with color
         print(f"\033[32m=== Bot Ready ===\n{status}\n===============\033[0m")
-
-        # Log to Discord if enabled and logger is available
-        if list_startup:
-            await Logger().log(
-                text=f"🚀 Bot is online! Startup took {startup_time:.2f}s",
-                color=0x00FF00,
-                type="Startup",
-                priority=1,
-                user=bot.user,
-            )
 
         # Initialize log files
         if not os.path.exists(os.path.join(data_dir, "bot_logs.json")):

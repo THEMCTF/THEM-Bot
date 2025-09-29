@@ -9,8 +9,8 @@ import disnake
 import yaml
 from disnake.ext import commands
 
-from Modules.Logger import log
 from Modules.Database import Database
+from Modules.Logger import Logger
 
 # Get the directory of the current script
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -222,7 +222,7 @@ class MessageResponder(commands.Cog):
                 f"❌ Failed to send DM: {str(e)}", ephemeral=True
             )
 
-    @log(text="DM logs command was used", color=0x00FF00)
+    @Logger
     # @commands.slash_command(
     # name="dm_logs",
     # description="View recent DM logs",

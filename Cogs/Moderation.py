@@ -1,22 +1,89 @@
-from datetime import timedelta
+import time
+from datetime import datetime, timedelta, timezone
 
 import disnake
 from disnake.ext import commands
 
-# from Modules import logger
 from Modules.Database import Database  # For ticket solutions
+from Modules.Logger import Logger
 
 
 class ModerationCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self._last_purge_timestamp: float = 0
 
-    # @log(text="Purge command was used", color=0xFF0000)
+    async def _perform_purge(
+        self,
+        inter: disnake.ApplicationCommandInteraction,
+        response_type: str = "default",
+        user: disnake.User = None,
+        **purge_kwargs,
+    ):
+        """
+        A helper function to perform message purging, handle exceptions, and send responses.
+
+        Args:
+            inter: The interaction to respond to.
+            response_type: The type of response to send ('default' or 'from_message').
+            user: The user whose messages are being purged (for response formatting).
+            **purge_kwargs: Keyword arguments to pass to `channel.purge()`.
+        """
+        try:
+            # If a user is specified for a standard purge, we need to collect messages manually
+            # to ensure we delete the correct number of messages from that user.
+            if user and response_type == "default":
+                messages_to_delete = []
+                limit = purge_kwargs.get("limit", 100)
+                async for message in inter.channel.history(
+                    limit=limit * 5
+                ):  # Search more to find user's messages
+                    if len(messages_to_delete) >= limit:
+                        break
+                    if message.author.id == user.id:
+                        messages_to_delete.append(message)
+
+                if not messages_to_delete:
+                    deleted = []
+                else:
+                    # bulk_delete is not a method on TextChannel, use delete_messages instead.
+                    await inter.channel.delete_messages(messages_to_delete)
+                    deleted = messages_to_delete  # The return value is None, so we use our list.
+            else:
+                deleted = await inter.channel.purge(**purge_kwargs)
+
+            # Send public emoji confirmation if not on cooldown
+            current_time = time.time()
+            if current_time - self._last_purge_timestamp > 180:  # 3 minutes
+                await inter.channel.send(
+                    "<:purge:1422343889100083200><:purgy:1422343933220093952>"
+                )
+                self._last_purge_timestamp = current_time
+
+            # Send ephemeral confirmation
+            if response_type == "default":
+                msg = f"Deleted {len(deleted)} message(s)"
+                if user:
+                    msg += f" from {str(user)}."
+                await inter.followup.send(msg, ephemeral=True)
+            else:  # from_message
+                await inter.followup.send(
+                    f"Deleted {len(deleted)} message(s).", ephemeral=True
+                )
+
+        except disnake.Forbidden:
+            await inter.followup.send(
+                "I don't have permission to delete messages.", ephemeral=True
+            )
+        except disnake.HTTPException as e:
+            await inter.followup.send(f"Failed to delete messages: {e}", ephemeral=True)
+
     @commands.slash_command(
         name="purge",
         description="Delete multiple messages at once",
         default_member_permissions=disnake.Permissions(manage_messages=True),
     )
+    @Logger
     @commands.cooldown(1, 5, commands.BucketType.channel)
     @commands.guild_only()
     async def purge(
@@ -41,28 +108,13 @@ class ModerationCog(commands.Cog):
             return user is None or msg.author.id == user.id
 
         # Delete messages
-        try:
-            deleted = await inter.channel.purge(
-                limit=amount,
-                check=check,
-            )
+        await self._perform_purge(inter, user=user, limit=amount, check=check)
 
-            msg = f"Deleted {len(deleted)} message(s)"
-            if user:
-                msg += f" from {user.mention}"
-
-            await inter.followup.send(msg, ephemeral=True)
-
-        except disnake.Forbidden:
-            await inter.followup.send(
-                "I don't have permission to delete messages", ephemeral=True
-            )
-
-    # @log(text="Purge (context menu) command was used", color=0xFF0000)
     @commands.message_command(
         name="purge",
         default_member_permissions=disnake.Permissions(manage_messages=True),
     )
+    @Logger
     @commands.cooldown(1, 10, commands.BucketType.channel)
     @commands.guild_only()
     async def purge_from_message(
@@ -73,35 +125,25 @@ class ModerationCog(commands.Cog):
         """Deletes the selected message and all messages below it."""
         await inter.response.defer(ephemeral=True)
 
-        try:
-            # Purge messages after the target message, including the message itself.
-            # The `before` parameter is exclusive, so we find messages sent after the
-            # target message's creation time.
-            deleted = await inter.channel.purge(
-                limit=None,  # No l                                     imit, purge all applicable
-                after=message.created_at - timedelta(microseconds=1),
-                oldest_first=False,  # Not strictly necessary, but can be slightly more efficient
-            )
-
-            await inter.followup.send(
-                f"Deleted {len(deleted)} message(s).", ephemeral=True
-            )
-
-        except disnake.Forbidden:
-            await inter.followup.send(
-                "I don't have permission to delete messages.", ephemeral=True
-            )
-        except disnake.HTTPException as e:
-            await inter.followup.send(f"Failed to delete messages: {e}", ephemeral=True)
+        # Purge messages after the target message, including the message itself.
+        # The `after` parameter is exclusive, so we find messages sent after the
+        # target message's creation time.
+        await self._perform_purge(
+            inter,
+            response_type="from_message",
+            limit=None,
+            after=message.created_at - timedelta(microseconds=1),
+            oldest_first=False,
+        )
 
     @commands.slash_command(
         name="timeout",
         description="Time a user out",
         default_member_permissions=disnake.Permissions(moderate_members=True),
     )
+    @Logger
     @commands.cooldown(1, 5, commands.BucketType.user)
     @commands.guild_only()
-    # @log(text="Timeout command was used", color=0xFF0000)
     async def timeout(
         self,
         inter: disnake.ApplicationCommandInteraction,
@@ -138,8 +180,8 @@ class ModerationCog(commands.Cog):
             )
 
     # TODO: make it select which challenge it's for
-    # @log(text="Solution marked", color=0x00FF00)
     @commands.message_command(name="Solution")
+    @Logger
     async def mark_solution(
         self, inter: disnake.ApplicationCommandInteraction, message: disnake.Message
     ):
@@ -170,11 +212,11 @@ class ModerationCog(commands.Cog):
                 f"Failed to mark solution: {str(e)}", ephemeral=True
             )
 
-    # @log(text="Solution count requested", color=0x00FF00)
     @commands.slash_command(
         name="solutions",
         description="Get the solutions in this channel",
     )
+    @Logger
     async def get_solutions(self, inter: disnake.ApplicationCommandInteraction):
         # Check if channel is in the correct category
         if inter.channel.category_id != 1385339846117294110:
