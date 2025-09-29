@@ -6,8 +6,8 @@ import time
 import disnake
 from disnake.ext import commands
 
-from Modules import log
 from Modules.CooldownManager import dynamic_cooldown
+from Modules.Logger import _logger as log
 
 
 class GeneralCog(commands.Cog):

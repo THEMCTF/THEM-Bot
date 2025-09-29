@@ -9,7 +9,7 @@ import disnake
 import yaml
 from disnake.ext import commands
 
-from Modules import log
+from Modules.Logger import log
 from Modules.Database import Database
 
 # Get the directory of the current script

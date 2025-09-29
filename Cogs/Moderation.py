@@ -3,7 +3,7 @@ from datetime import timedelta
 import disnake
 from disnake.ext import commands
 
-from Modules import log
+# from Modules import logger
 from Modules.Database import Database  # For ticket solutions
 
 
@@ -11,7 +11,7 @@ class ModerationCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @log(text="Purge command was used", color=0xFF0000)
+    # @log(text="Purge command was used", color=0xFF0000)
     @commands.slash_command(
         name="purge",
         description="Delete multiple messages at once",
@@ -58,7 +58,7 @@ class ModerationCog(commands.Cog):
                 "I don't have permission to delete messages", ephemeral=True
             )
 
-    @log(text="Purge (context menu) command was used", color=0xFF0000)
+    # @log(text="Purge (context menu) command was used", color=0xFF0000)
     @commands.message_command(
         name="purge",
         default_member_permissions=disnake.Permissions(manage_messages=True),
@@ -101,7 +101,7 @@ class ModerationCog(commands.Cog):
     )
     @commands.cooldown(1, 5, commands.BucketType.user)
     @commands.guild_only()
-    @log(text="Timeout command was used", color=0xFF0000)
+    # @log(text="Timeout command was used", color=0xFF0000)
     async def timeout(
         self,
         inter: disnake.ApplicationCommandInteraction,
@@ -138,7 +138,7 @@ class ModerationCog(commands.Cog):
             )
 
     # TODO: make it select which challenge it's for
-    @log(text="Solution marked", color=0x00FF00)
+    # @log(text="Solution marked", color=0x00FF00)
     @commands.message_command(name="Solution")
     async def mark_solution(
         self, inter: disnake.ApplicationCommandInteraction, message: disnake.Message
@@ -170,7 +170,7 @@ class ModerationCog(commands.Cog):
                 f"Failed to mark solution: {str(e)}", ephemeral=True
             )
 
-    @log(text="Solution count requested", color=0x00FF00)
+    # @log(text="Solution count requested", color=0x00FF00)
     @commands.slash_command(
         name="solutions",
         description="Get the solutions in this channel",

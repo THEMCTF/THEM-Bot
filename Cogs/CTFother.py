@@ -2,7 +2,6 @@ import asyncio
 import datetime
 import json
 import os
-import subprocess
 
 import disnake
 import google.auth
@@ -12,10 +11,9 @@ from disnake.ext import commands, tasks
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-from Modules import log
 from Modules.CooldownManager import dynamic_cooldown
 from Modules.Database import Database
-from Modules.Logger import Logger
+from Modules.Logger import _logger as log
 
 # --- Configuration Loading ---
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -71,28 +69,28 @@ class CTFModalPart1(disnake.ui.Modal):
             disnake.ui.TextInput(
                 label="CTF name (Do not include year)",
                 custom_id="name",
-                style=disnake.TextInputStyle.short,
+                style=TextInputStyle.short,
                 required=True,
                 max_length=100,
             ),
             disnake.ui.TextInput(
                 label="CTF start time (YYYY-MM-DD HH:MM, UTC)",
                 custom_id="start",
-                style=disnake.TextInputStyle.short,
+                style=TextInputStyle.short,
                 required=True,
                 max_length=100,
             ),
             disnake.ui.TextInput(
                 label="CTF end time (YYYY-MM-DD HH:MM, UTC)",
                 custom_id="end",
-                style=disnake.TextInputStyle.short,
+                style=TextInputStyle.short,
                 required=True,
                 max_length=100,
             ),
             disnake.ui.TextInput(
                 label="Website URL",
                 custom_id="website",
-                style=disnake.TextInputStyle.short,
+                style=TextInputStyle.short,
                 required=True,
                 placeholder="https://ctf.example.com",
                 max_length=200,
@@ -154,7 +152,7 @@ class CTFModalPart2(disnake.ui.Modal):
             disnake.ui.TextInput(
                 label="More categories (separate with semicolon ;)",
                 custom_id="cats",
-                style=disnake.TextInputStyle.short,
+                style=TextInputStyle.short,
                 required=False,
                 placeholder="e.g. steganography;blockchain",
                 max_length=200,
@@ -162,7 +160,7 @@ class CTFModalPart2(disnake.ui.Modal):
             disnake.ui.TextInput(
                 label="Team name",
                 custom_id="teamname",
-                style=disnake.TextInputStyle.short,
+                style=TextInputStyle.short,
                 required=True,
                 placeholder="THEM?!",
                 max_length=200,
@@ -170,7 +168,7 @@ class CTFModalPart2(disnake.ui.Modal):
             disnake.ui.TextInput(
                 label="Password",
                 custom_id="password",
-                style=disnake.TextInputStyle.short,
+                style=TextInputStyle.short,
                 required=False,
                 placeholder="v3rY-S3cur3-Pa55w0rd",
                 max_length=200,
@@ -178,7 +176,7 @@ class CTFModalPart2(disnake.ui.Modal):
             disnake.ui.TextInput(
                 label="Discord",
                 custom_id="discord",
-                style=disnake.TextInputStyle.short,
+                style=TextInputStyle.short,
                 required=False,
                 placeholder="discord.gg/its-them",
                 max_length=200,
@@ -186,7 +184,7 @@ class CTFModalPart2(disnake.ui.Modal):
             disnake.ui.TextInput(
                 label="Spreadsheet",
                 custom_id="sheet",
-                style=disnake.TextInputStyle.short,
+                style=TextInputStyle.short,
                 required=False,
                 placeholder="h",
                 max_length=200,
@@ -255,7 +253,7 @@ class CTFModalPart2(disnake.ui.Modal):
             all_categories = self.selected_types + additional_categories
 
             if not sheet_url:
-                sheet_id = SheetSetup.createSheet(ctf_name, all_categories)
+                sheet_id = await SheetSetup.createSheet(ctf_name, all_categories)
                 if sheet_id:
                     sheet_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}"
 
@@ -343,7 +341,6 @@ class CTFModalPart2(disnake.ui.Modal):
                 ):
                     if ctf_name_input.lower() in msg.content.lower():
                         found_announcement = True
-                        break
                         await self.send_role_button(
                             announcement_channel, ctf_name, end_time
                         )
@@ -355,14 +352,16 @@ class CTFModalPart2(disnake.ui.Modal):
                     button_embed = disnake.Embed(
                         title=f"Get the {ctf_name} Role!",
                         description=(
-                            f"Click the button below to get the role for **{ctf_name}** and access the channels.\n"
+                            f"Click the button below to get the role for **{ctf_name}** "
+                            f"and access the channels.\n"
                             "You must have a player role to do this."
                         ),
                         color=disnake.Color.blurple(),
                     )
                     if not role_button_sent:
                         print(
-                            f"No recent announcement for '{ctf_name_input}'. Adding to pending list."
+                            f"No recent announcement for '{ctf_name_input}'. "
+                            "Adding to pending list."
                         )
                         message = await announcement_channel.send(
                             embed=button_embed, view=view
@@ -387,8 +386,14 @@ class CTFModalPart2(disnake.ui.Modal):
 
             response_message = "CTF registration processed successfully!"
             if not role_button_sent:
-                response_message += "\n\n⚠️ **Note:** The 'Get Role' button was not sent because no corresponding announcement was found in the last 24 hours."
-                response_message += "\n\n⏳ The 'Get Role' button will be sent automatically once an announcement for this CTF is detected."
+                response_message += (
+                    "\n\n⚠️ **Note:** The 'Get Role' button was not sent because no "
+                    "corresponding announcement was found in the last 24 hours."
+                )
+                response_message += (
+                    "\n\n⏳ The 'Get Role' button will be sent automatically once an "
+                    "announcement for this CTF is detected."
+                )
             await inter.response.send_message(
                 response_message, embed=embed, ephemeral=True
             )
@@ -410,11 +415,15 @@ class CTFModalPart2(disnake.ui.Modal):
 
             # Log the CTF registration (assuming Logger is properly set up)
             try:
-                logger_instance = Logger(inter.bot)
-                await logger_instance.log(
-                    text=f"CTF registered: {ctf_name} by {inter.author} ({inter.author.id})",
+                await log.log(
+                    text=(
+                        f"CTF registered: {ctf_name} by {inter.author} "
+                        f"({inter.author.id})"
+                    ),
                     color=disnake.Color.blue(),
                     type="CTF Registration",
+                    priority=0,
+                    user=inter.author,
                 )
             except Exception as e:
                 print(f"Logging error: {e}")
@@ -426,6 +435,59 @@ class CTFModalPart2(disnake.ui.Modal):
             )
             print(f"Modal callback error: {e}")
 
+    @staticmethod
+    async def make_role(
+        guild: disnake.Guild,
+        name: str,
+        color: disnake.Color = disnake.Color.default(),
+        hoist: bool = False,
+        mentionable: bool = False,
+        permissions: disnake.Permissions = disnake.Permissions.none(),
+    ):
+        """Create a new role in the specified guild with given parameters."""
+        """
+        Creates a new role in the server.
+
+        Parameters
+        ----------
+        guild: The guild to create the role in.
+        name: The name of the role.
+        color: The color of the role (optional, defaults to default color).
+        hoist: Whether the role should be displayed separately in the member list (optional, defaults to False).
+        mentionable: Whether the role can be mentioned by anyone (optional, defaults to False).
+        permissions: The permissions for the role (optional, defaults to no permissions).
+        """
+        try:
+            # Get the target role by ID
+            target_role = guild.get_role(1382763556642099242)
+
+            if target_role:
+                # Calculate the position for the new role (one less than the target role)
+                new_role_position = target_role.position
+            else:
+                new_role_position = 19
+
+            new_role = await guild.create_role(
+                name=name,
+                color=color,
+                hoist=hoist,
+                mentionable=mentionable,
+                permissions=permissions,
+            )
+
+            # Move the role to the desired position
+            await new_role.edit(position=new_role_position)
+
+            print(f"Created role '{new_role.name}' successfully!")
+            return new_role
+
+        except disnake.Forbidden:
+            print("Bot doesn't have permission to create roles.")
+            return None
+        except Exception as e:
+            print(f"An error occurred creating role: {e}")
+            return None
+
     async def send_role_button(
         self, channel: disnake.TextChannel, ctf_name: str, end_time: int
     ):
@@ -433,8 +495,11 @@ class CTFModalPart2(disnake.ui.Modal):
         view = GetRoleView(ctf_name=ctf_name, player_roles=CTF_PLAYER_ROLES)
         embed = disnake.Embed(
             title=f"Get the {ctf_name} Role!",
-            description=f"Click the button below to get the role for **{ctf_name}** and access the channels.\n"
-            "You must have a player role to do this.",
+            description=(
+                f"Click the button below to get the role for **{ctf_name}** "
+                f"and access the channels.\n"
+                "You must have a player role to do this."
+            ),
             color=disnake.Color.blurple(),
         )
         message = await channel.send(embed=embed, view=view)
@@ -445,6 +510,157 @@ class CTFModalPart2(disnake.ui.Modal):
         )
         await Database.add_active_button(ctf_name, message.id, channel.id, end_time_dt)
         print(f"Sent role button for {ctf_name}")
+
+    @staticmethod
+    async def make_ctf_channel(
+        guild: disnake.Guild, channel_name: str, allowed_role: disnake.Role
+    ):
+        """Create a private text channel for the CTF with restricted access."""
+        # Define permission overwrites for the @everyone role
+        everyone_overwrite = disnake.PermissionOverwrite(view_channel=False)
+
+        # Define permission overwrites for roles that should have access
+        allowed_role_overwrite = disnake.PermissionOverwrite(view_channel=True)
+
+        # Get the other role by ID
+        other_role = guild.get_role(1382763556792963102)
+
+        # Create overwrites dictionary
+        overwrites = {
+            guild.default_role: everyone_overwrite,
+        }
+
+        if allowed_role:
+            overwrites[allowed_role] = allowed_role_overwrite
+
+        # Add the other role if it exists
+        if other_role:
+            overwrites[other_role] = allowed_role_overwrite
+
+        # Create the text channel
+        try:
+            category_channel = guild.get_channel(1382763557816500226)
+            new_channel = await guild.create_text_channel(
+                name=channel_name,
+                overwrites=overwrites,
+                position=1,
+                category=category_channel,
+            )
+            print(
+                f"Created private channel: {new_channel.name} with access for {allowed_role.name if allowed_role else 'no specific role'}"
+            )
+            return new_channel
+        except disnake.HTTPException as e:
+            print(f"Error creating channel: {e}")
+            return None
+
+    @staticmethod
+    async def make_forum_channel(
+        guild: disnake.Guild,
+        channel_name: str,
+        tags: list[dict],
+        perms: dict[disnake.Role | disnake.Member, disnake.PermissionOverwrite],
+        website: str,
+        start_time: int,
+        sheet_url: str,
+        end_time: int,
+        require_tag: bool = True,
+    ):
+        """
+        Create a forum channel with specified name, tags, and permissions.
+
+        Args:
+            guild: The Discord guild to create the channel in
+            channel_name: Name of the forum channel
+            tags: List of tag dictionaries with 'name' and optionally 'emoji' keys
+            sheet_url: The URL for the Google Sheet.
+            perms: Dictionary mapping role IDs/role objects to permission overwrites
+            website: The URL for the CTF website.
+            start_time: The UNIX timestamp for the CTF start time.
+            end_time: The UNIX timestamp for the CTF end time.
+            require_tag: Whether to require a tag when creating a post.
+        """
+
+        try:
+            category_channel = guild.get_channel(1382763557816500226)
+            # Create the forum channel first
+            forum_channel = await guild.create_forum_channel(
+                name=channel_name,
+                overwrites=perms,
+                position=1,
+                category=category_channel,
+            )
+
+            # Set the require_tag flag
+            flags = disnake.ChannelFlags(require_tag=require_tag)
+            await forum_channel.edit(flags=flags)
+
+            # Create forum tags
+            forum_tags = []
+            for tag_data in tags:
+                if isinstance(tag_data, dict):
+                    tag_name = tag_data.get("name")
+                    tag_emoji = tag_data.get("emoji")
+                else:
+                    # Handle case where tag_data might be a string
+                    tag_name = str(tag_data)
+                    tag_emoji = None
+
+                if tag_name:
+                    # Create ForumTag object
+                    if tag_emoji:
+                        forum_tag = disnake.ForumTag(name=tag_name, emoji=tag_emoji)
+                    else:
+                        forum_tag = disnake.ForumTag(name=tag_name)
+                    forum_tags.append(forum_tag)
+
+            # Edit the channel to add the tags
+            if forum_tags:
+                await forum_channel.edit(available_tags=forum_tags)
+
+            # Create the "Information" thread
+            info_embed = disnake.Embed(
+                title="CTF Information",
+                color=disnake.Color.dark_teal(),
+            )
+            if website:
+                info_embed.add_field(name="🌐 Website", value=website, inline=False)
+
+            info_embed.add_field(
+                name="⏰ Start Time", value=f"<t:{start_time}:F>", inline=True
+            )
+            info_embed.add_field(
+                name="⏰ End Time", value=f"<t:{end_time}:F>", inline=True
+            )
+            sheet_value = sheet_url if sheet_url else "*Coming soon...*"
+            info_embed.add_field(
+                name="📊 Google Sheet", value=sheet_value, inline=False
+            )
+
+            # Create a view with a placeholder calendar button
+            calendar_view = disnake.ui.View()
+            calendar_view.add_item(
+                disnake.ui.Button(
+                    label="Add to Calendar",
+                    style=disnake.ButtonStyle.secondary,
+                    disabled=True,
+                )
+            )
+
+            # Create, pin, and lock the thread
+            thread = await forum_channel.create_thread(
+                name="Information", embed=info_embed, view=calendar_view
+            )
+            await thread.edit(pinned=True, locked=True)
+
+            print(
+                f"Created forum channel: {forum_channel.name} with {len(forum_tags)} tags"
+            )
+            return forum_channel
+
+        except disnake.HTTPException as e:
+            print(f"Error creating forum channel: {e}")
+            return None
 
 
 class GetRoleView(disnake.ui.View):
@@ -477,33 +693,6 @@ def user_has_required_role(
         return False
     user_role_ids = {role.id for role in inter.author.roles}
     return not user_role_ids.isdisjoint(required_roles)
-
-
-@commands.command(name="sendrolebutton", hidden=True)
-@commands.check(can_use_backup_command)
-async def send_role_button_command(ctx: commands.Context, *, ctf_name: str):
-    """
-    Manually sends the 'Get Role' button for a CTF.
-    Usage: !sendrolebutton <CTF Name with year>
-    """
-    if not ctf_name:
-        await ctx.send("Please provide a CTF name.", delete_after=10)
-        return
-
-    role = disnake.utils.get(ctx.guild.roles, name=ctf_name)
-    if not role:
-        await ctx.send(f"Role `{ctf_name}` not found.", delete_after=10)
-        return
-
-    view = GetRoleView(ctf_name=ctf_name, player_roles=CTF_PLAYER_ROLES)
-    embed = disnake.Embed(
-        title=f"Get the {ctf_name} Role!",
-        description=f"Click the button below to get the role for **{ctf_name}** and access the channels.\n"
-        "You must have a player role to do this.",
-        color=disnake.Color.blurple(),
-    )
-    await ctx.send(embed=embed, view=view)
-    await ctx.message.delete()
 
 
 class CTFSheet(commands.Cog):
@@ -586,207 +775,6 @@ class CTFSheet(commands.Cog):
         await inter.response.send_message(embed=embed, view=view, ephemeral=True)
 
     @staticmethod
-    async def make_role(
-        guild: disnake.Guild,
-        name: str,
-        color: disnake.Color = disnake.Color.default(),
-        hoist: bool = False,
-        mentionable: bool = False,
-        permissions: disnake.Permissions = disnake.Permissions.none(),
-    ):
-        """Create a new role in the specified guild with given parameters."""
-        """
-        Creates a new role in the server.
-
-        Parameters
-        ----------
-        guild: The guild to create the role in.
-        name: The name of the role.
-        color: The color of the role (optional, defaults to default color).
-        hoist: Whether the role should be displayed separately in the member list (optional, defaults to False).
-        mentionable: Whether the role can be mentioned by anyone (optional, defaults to False).
-        permissions: The permissions for the role (optional, defaults to no permissions).
-        """
-        try:
-            # Get the target role by ID
-            target_role = guild.get_role(1382763556642099242)
-
-            if target_role:
-                # Calculate the position for the new role (one less than the target role)
-                new_role_position = target_role.position
-            else:
-                new_role_position = 19
-
-            new_role = await guild.create_role(
-                name=name,
-                color=color,
-                hoist=hoist,
-                mentionable=mentionable,
-                permissions=permissions,
-            )
-
-            # Move the role to the desired position
-            await new_role.edit(position=new_role_position)
-
-            print(f"Created role '{new_role.name}' successfully!")
-            return new_role
-
-        except disnake.Forbidden:
-            print("Bot doesn't have permission to create roles.")
-            return None
-        except Exception as e:
-            print(f"An error occurred creating role: {e}")
-            return None
-
-    @staticmethod
-    async def make_ctf_channel(
-        guild: disnake.Guild, channel_name: str, allowed_role: disnake.Role
-    ):
-        """Create a private text channel for the CTF with restricted access."""
-        # Define permission overwrites for the @everyone role
-        everyone_overwrite = disnake.PermissionOverwrite(view_channel=False)
-
-        # Define permission overwrites for roles that should have access
-        allowed_role_overwrite = disnake.PermissionOverwrite(view_channel=True)
-
-        # Get the other role by ID
-        other_role = guild.get_role(1382763556792963102)
-
-        # Create overwrites dictionary
-        overwrites = {
-            guild.default_role: everyone_overwrite,
-        }
-
-        if allowed_role:
-            overwrites[allowed_role] = allowed_role_overwrite
-
-        # Add the other role if it exists
-        if other_role:
-            overwrites[other_role] = allowed_role_overwrite
-
-        # Create the text channel
-        try:
-            new_channel = await guild.create_text_channel(
-                name=channel_name,
-                overwrites=overwrites,
-                position=1,
-                category=1382763557816500226,
-            )
-            print(
-                f"Created private channel: {new_channel.name} with access for {allowed_role.name if allowed_role else 'no specific role'}"
-            )
-            return new_channel
-        except disnake.HTTPException as e:
-            print(f"Error creating channel: {e}")
-            return None
-
-    @staticmethod
-    async def make_forum_channel(
-        guild: disnake.Guild,
-        channel_name: str,
-        tags: list[dict],
-        perms: dict[disnake.Role | disnake.Member, disnake.PermissionOverwrite],
-        website: str,
-        start_time: int,
-        sheet_url: str,
-        end_time: int,
-        require_tag: bool = True,
-    ):
-        """
-        Create a forum channel with specified name, tags, and permissions.
-
-        Args:
-            guild: The Discord guild to create the channel in
-            channel_name: Name of the forum channel
-            tags: List of tag dictionaries with 'name' and optionally 'emoji' keys
-            sheet_url: The URL for the Google Sheet.
-            perms: Dictionary mapping role IDs/role objects to permission overwrites
-            website: The URL for the CTF website.
-            start_time: The UNIX timestamp for the CTF start time.
-            end_time: The UNIX timestamp for the CTF end time.
-            require_tag: Whether to require a tag when creating a post.
-        """
-
-        try:
-            # Create the forum channel first
-            forum_channel = await guild.create_forum_channel(
-                name=channel_name,
-                overwrites=perms,
-                position=1,
-                category=1382763557816500226,
-            )
-
-            # Set the require_tag flag
-            flags = disnake.ChannelFlags(require_tag=require_tag)
-            await forum_channel.edit(flags=flags)
-
-            # Create forum tags
-            forum_tags = []
-            for tag_data in tags:
-                if isinstance(tag_data, dict):
-                    tag_name = tag_data.get("name")
-                    tag_emoji = tag_data.get("emoji")
-                else:
-                    # Handle case where tag_data might be a string
-                    tag_name = str(tag_data)
-                    tag_emoji = None
-
-                if tag_name:
-                    # Create ForumTag object
-                    if tag_emoji:
-                        forum_tag = disnake.ForumTag(name=tag_name, emoji=tag_emoji)
-                    else:
-                        forum_tag = disnake.ForumTag(name=tag_name)
-                    forum_tags.append(forum_tag)
-
-            # Edit the channel to add the tags
-            if forum_tags:
-                await forum_channel.edit(available_tags=forum_tags)
-
-            # Create the "Information" thread
-            info_embed = disnake.Embed(
-                title="CTF Information",
-                color=disnake.Color.dark_teal(),
-            )
-            if website:
-                info_embed.add_field(name="🌐 Website", value=website, inline=False)
-
-            info_embed.add_field(
-                name="⏰ Start Time", value=f"<t:{start_time}:F>", inline=True
-            )
-            info_embed.add_field(
-                name="⏰ End Time", value=f"<t:{end_time}:F>", inline=True
-            )
-            sheet_value = sheet_url if sheet_url else "*Coming soon...*"
-            info_embed.add_field(
-                name="📊 Google Sheet", value=sheet_value, inline=False
-            )
-
-            # Create a view with a placeholder calendar button
-            calendar_view = disnake.ui.View()
-            calendar_view.add_item(
-                disnake.ui.Button(
-                    label="Add to Calendar",
-                    style=disnake.ButtonStyle.secondary,
-                    disabled=True,
-                )
-            )
-
-            # Create, pin, and lock the thread
-            thread = await forum_channel.create_thread(
-                name="Information", embed=info_embed, view=calendar_view
-            )
-            await thread.edit(pinned=True, locked=True)
-
-            print(
-                f"Created forum channel: {forum_channel.name} with {len(forum_tags)} tags"
-            )
-            return forum_channel
-
-        except disnake.HTTPException as e:
-            print(f"Error creating forum channel: {e}")
-            return None
-
     @commands.Cog.listener("on_button_click")
     @dynamic_cooldown()
     async def handle_get_role_button(self, inter: disnake.MessageInteraction):
@@ -835,6 +823,39 @@ class CTFSheet(commands.Cog):
                 f"❌ An error occurred: {e}", ephemeral=True
             )
 
+    @commands.slash_command(
+        name="sendrolebutton", hidden=True, default_member_permissions="manage_members"
+    )
+    @commands.check(can_use_backup_command)
+    @log()
+    async def send_role_button_command(
+        self, inter: disnake.ApplicationCommandInteraction, *, ctf_name: str
+    ):
+        """
+        Manually sends the 'Get Role' button for a CTF.
+        Usage: !sendrolebutton <CTF Name with year>
+        """
+        if not ctf_name:
+            await inter.response.send_message(
+                "Please provide a CTF name.", ephemeral=True
+            )
+            return
+
+        role = disnake.utils.get(inter.guild.roles, name=ctf_name)
+        if not role:
+            await inter.send(f"Role `{ctf_name}` not found.", ephemeral=True)
+            return
+
+        view = GetRoleView(ctf_name=ctf_name, player_roles=CTF_PLAYER_ROLES)
+        embed = disnake.Embed(
+            title=f"Get the {ctf_name} Role!",
+            description=(
+                f"Click the button below to get the role for **{ctf_name}** and access the channels.\n"
+            ),
+            color=disnake.Color.blurple(),
+        )
+        await inter.response.send_message(embed=embed, view=view)
+
     @commands.Cog.listener("on_message")
     async def on_announcement_message(self, message: disnake.Message):
         """Listen for new messages in the announcement channel."""
@@ -854,8 +875,7 @@ class CTFSheet(commands.Cog):
             data = item
             if ctf_name_input in message.content.lower():
                 print(f"Announcement detected for '{ctf_name_input}'. Sending button.")
-                await CTFModalPart2.send_role_button(
-                    self,
+                await self.send_role_button(
                     message.channel,
                     data["ctf_name"],
                     int(data["end_time"].timestamp()),
@@ -864,161 +884,170 @@ class CTFSheet(commands.Cog):
 
 
 class SheetSetup:
-    def createSheet(title, categories):
-        creds, _ = google.auth.default()
-        try:
-            service = build("sheets", "v4", credentials=creds)
-            spreadsheet = {"properties": {"title": title}}
-            spreadsheet = (
-                service.spreadsheets()
-                .create(body=spreadsheet, fields="spreadsheetId,sheets")
-                .execute()
-            )
-            spreadsheet_id = spreadsheet.get("spreadsheetId")
-            participants_sheet_id = (
-                spreadsheet.get("sheets")[0].get("properties").get("sheetId")
-            )
+    @staticmethod
+    async def createSheet(title, categories):
+        def _create_sheet_blocking():
+            creds, _ = google.auth.default()
+            try:
+                service = build("sheets", "v4", credentials=creds)
+                spreadsheet = {"properties": {"title": title}}
+                spreadsheet = (
+                    service.spreadsheets()
+                    .create(body=spreadsheet, fields="spreadsheetId,sheets")
+                    .execute()
+                )
+                spreadsheet_id = spreadsheet.get("spreadsheetId")
+                participants_sheet_id = (
+                    spreadsheet.get("sheets")[0].get("properties").get("sheetId")
+                )
 
-            requests = [
-                # Rename sheet 1 to "Participants"
-                {
-                    "updateSheetProperties": {
-                        "properties": {
-                            "sheetId": participants_sheet_id,
-                            "title": "Participants",
-                        },
-                        "fields": "title",
-                    }
-                },
-                # Add and format title for Participants sheet
-                {
-                    "updateCells": {
-                        "rows": [
-                            {
-                                "values": [
-                                    {
-                                        "userEnteredValue": {
-                                            "stringValue": f"Participants {title}"
-                                        },
-                                        "userEnteredFormat": {
-                                            "textFormat": {"fontSize": 14, "bold": True}
-                                        },
-                                    }
-                                ]
-                            }
-                        ],
-                        "start": {
-                            "sheetId": participants_sheet_id,
-                            "rowIndex": 0,
-                            "columnIndex": 0,
-                        },
-                        "fields": "userEnteredValue,userEnteredFormat.textFormat",
-                    }
-                },
-                # Add header for Participants sheet
-                {
-                    "updateCells": {
-                        "rows": [
-                            {
-                                "values": [
-                                    {
-                                        "userEnteredValue": {
-                                            "stringValue": "Participant name (use dc user)"
+                requests = [
+                    # Rename sheet 1 to "Participants"
+                    {
+                        "updateSheetProperties": {
+                            "properties": {
+                                "sheetId": participants_sheet_id,
+                                "title": "Participants",
+                            },
+                            "fields": "title",
+                        }
+                    },
+                    # Add and format title for Participants sheet
+                    {
+                        "updateCells": {
+                            "rows": [
+                                {
+                                    "values": [
+                                        {
+                                            "userEnteredValue": {
+                                                "stringValue": f"Participants {title}"
+                                            },
+                                            "userEnteredFormat": {
+                                                "textFormat": {
+                                                    "fontSize": 14,
+                                                    "bold": True,
+                                                }
+                                            },
                                         }
-                                    },
-                                    {"userEnteredValue": {"stringValue": "Skill"}},
-                                    {"userEnteredValue": {"stringValue": "Note"}},
-                                ]
-                            }
-                        ],
-                        "start": {
-                            "sheetId": participants_sheet_id,
-                            "rowIndex": 1,
-                            "columnIndex": 0,
-                        },
-                        "fields": "userEnteredValue",
-                    }
-                },
-                # Add data validation for Skills
-                {
-                    "setDataValidation": {
-                        "range": {
-                            "sheetId": participants_sheet_id,
-                            "startRowIndex": 2,
-                            "endRowIndex": 100,
-                            "startColumnIndex": 1,
-                            "endColumnIndex": 2,
-                        },
-                        "rule": {
-                            "condition": {
-                                "type": "ONE_OF_LIST",
-                                "values": [
-                                    {"userEnteredValue": cat} for cat in categories
-                                ],
+                                    ]
+                                }
+                            ],
+                            "start": {
+                                "sheetId": participants_sheet_id,
+                                "rowIndex": 0,
+                                "columnIndex": 0,
                             },
-                            "showCustomUi": True,
-                        },
-                    }
-                },
-                # Add new sheet for "Challenges"
-                {"addSheet": {"properties": {"title": "Challenges"}}},
-            ]
-
-            # Execute first batch
-            response = (
-                service.spreadsheets()
-                .batchUpdate(spreadsheetId=spreadsheet_id, body={"requests": requests})
-                .execute()
-            )
-
-            challenges_sheet_id = response["replies"][4]["addSheet"]["properties"][
-                "sheetId"
-            ]
-
-            # Load requests from JSON file
-            with open(
-                os.path.join(current_dir, "..", "data", "setupbasic.json"), "r"
-            ) as f:
-                requests_challenges_str = f.read()
-
-            requests_challenges_str = requests_challenges_str.replace(
-                "{challenges_sheet_id}", str(challenges_sheet_id)
-            )
-            requests_challenges = json.loads(requests_challenges_str)
-
-            # Add dynamic data validation for Category
-            requests_challenges.append(
-                {
-                    "setDataValidation": {
-                        "range": {
-                            "sheetId": challenges_sheet_id,
-                            "startRowIndex": 3,
-                            "endRowIndex": 100,
-                            "startColumnIndex": 0,
-                            "endColumnIndex": 1,
-                        },
-                        "rule": {
-                            "condition": {
-                                "type": "ONE_OF_LIST",
-                                "values": [
-                                    {"userEnteredValue": cat} for cat in categories
-                                ],
+                            "fields": "userEnteredValue,userEnteredFormat.textFormat",
+                        }
+                    },
+                    # Add header for Participants sheet
+                    {
+                        "updateCells": {
+                            "rows": [
+                                {
+                                    "values": [
+                                        {
+                                            "userEnteredValue": {
+                                                "stringValue": "Participant name (use dc user)"
+                                            }
+                                        },
+                                        {"userEnteredValue": {"stringValue": "Skill"}},
+                                        {"userEnteredValue": {"stringValue": "Note"}},
+                                    ]
+                                }
+                            ],
+                            "start": {
+                                "sheetId": participants_sheet_id,
+                                "rowIndex": 1,
+                                "columnIndex": 0,
                             },
-                            "showCustomUi": True,
-                        },
+                            "fields": "userEnteredValue",
+                        }
+                    },
+                    # Add data validation for Skills
+                    {
+                        "setDataValidation": {
+                            "range": {
+                                "sheetId": participants_sheet_id,
+                                "startRowIndex": 2,
+                                "endRowIndex": 100,
+                                "startColumnIndex": 1,
+                                "endColumnIndex": 2,
+                            },
+                            "rule": {
+                                "condition": {
+                                    "type": "ONE_OF_LIST",
+                                    "values": [
+                                        {"userEnteredValue": cat} for cat in categories
+                                    ],
+                                },
+                                "showCustomUi": True,
+                            },
+                        }
+                    },
+                    # Add new sheet for "Challenges"
+                    {"addSheet": {"properties": {"title": "Challenges"}}},
+                ]
+
+                # Execute first batch
+                response = (
+                    service.spreadsheets()
+                    .batchUpdate(
+                        spreadsheetId=spreadsheet_id, body={"requests": requests}
+                    )
+                    .execute()
+                )
+
+                challenges_sheet_id = response["replies"][4]["addSheet"]["properties"][
+                    "sheetId"
+                ]
+
+                # Load requests from JSON file
+                with open(
+                    os.path.join(current_dir, "..", "data", "setupbasic.json"), "r"
+                ) as f:
+                    requests_challenges_str = f.read()
+
+                requests_challenges_str = requests_challenges_str.replace(
+                    "{challenges_sheet_id}", str(challenges_sheet_id)
+                )
+                requests_challenges = json.loads(requests_challenges_str)
+
+                # Add dynamic data validation for Category
+                requests_challenges.append(
+                    {
+                        "setDataValidation": {
+                            "range": {
+                                "sheetId": challenges_sheet_id,
+                                "startRowIndex": 3,
+                                "endRowIndex": 100,
+                                "startColumnIndex": 0,
+                                "endColumnIndex": 1,
+                            },
+                            "rule": {
+                                "condition": {
+                                    "type": "ONE_OF_LIST",
+                                    "values": [
+                                        {"userEnteredValue": cat} for cat in categories
+                                    ],
+                                },
+                                "showCustomUi": True,
+                            },
+                        }
                     }
-                }
-            )
+                )
 
-            service.spreadsheets().batchUpdate(
-                spreadsheetId=spreadsheet_id, body={"requests": requests_challenges}
-            ).execute()
+                service.spreadsheets().batchUpdate(
+                    spreadsheetId=spreadsheet_id, body={"requests": requests_challenges}
+                ).execute()
 
-            print("Sheet created and formatted.")
-            return spreadsheet_id
-        except HttpError as error:
-            print(f"An error occurred: {error}")
-            return None
+                print("Sheet created and formatted.")
+                return spreadsheet_id
+            except HttpError as error:
+                print(f"An error occurred: {error}")
+                return None
+
+        return await asyncio.to_thread(_create_sheet_blocking)
 
 
 def setup(bot):
