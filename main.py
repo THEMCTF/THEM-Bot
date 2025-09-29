@@ -8,7 +8,7 @@ import yaml
 from disnake.ext import commands
 from dotenv import load_dotenv
 
-from Modules.Logger import setup_logger
+from Modules.Logger import Logger, setup_logger
 
 photo = """\033[32m hi\033[0m"""
 
@@ -150,10 +150,8 @@ async def on_ready():
         print(f"\033[32m=== Bot Ready ===\n{status}\n===============\033[0m")
 
         # Log to Discord if enabled and logger is available
-        from Modules import log as logger
-
-        if list_startup and logger:
-            await logger.log(
+        if list_startup:
+            await Logger().log(
                 text=f"🚀 Bot is online! Startup took {startup_time:.2f}s",
                 color=0x00FF00,
                 type="Startup",
