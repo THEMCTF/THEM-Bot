@@ -1,86 +1,59 @@
+import os
 import time
 from datetime import datetime, timedelta, timezone
 
 import disnake
+import yaml
 from disnake.ext import commands
 
-from Modules.Database import Database  # For ticket solutions
-from Modules.Logger import Logger
+# --- Configuration Loading ---
+current_dir = os.path.dirname(os.path.abspath(__file__))
+config_path = os.path.join(current_dir, "..", "config.yml")
+config_path = os.path.normpath(config_path)
+
+with open(config_path, "r") as f:
+    config = yaml.safe_load(f)
+    MODERATOR_ROLE_IDS = config.get("moderator_roles", [])
+    COLORS = config.get("colors", {})
+    COLOR_RED = COLORS.get("red", 0xDD2E44)
+    COLOR_GREEN = COLORS.get("green", 0x78B159)
 
 
 class ModerationCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self._last_purge_timestamp: float = 0
+        self.locked_channels: dict[int, dict] = {}
 
-    async def _perform_purge(
+    async def _purge_(
         self,
         inter: disnake.ApplicationCommandInteraction,
-        response_type: str = "default",
         user: disnake.User = None,
-        **purge_kwargs,
+        **kwargs,
     ):
-        """
-        A helper function to perform message purging, handle exceptions, and send responses.
-
-        Args:
-            inter: The interaction to respond to.
-            response_type: The type of response to send ('default' or 'from_message').
-            user: The user whose messages are being purged (for response formatting).
-            **purge_kwargs: Keyword arguments to pass to `channel.purge()`.
-        """
-        try:
-            # If a user is specified for a standard purge, we need to collect messages manually
-            # to ensure we delete the correct number of messages from that user.
-            if user and response_type == "default":
-                messages_to_delete = []
-                limit = purge_kwargs.get("limit", 100)
-                async for message in inter.channel.history(
-                    limit=limit * 5
-                ):  # Search more to find user's messages
-                    if len(messages_to_delete) >= limit:
-                        break
-                    if message.author.id == user.id:
-                        messages_to_delete.append(message)
-
-                if not messages_to_delete:
-                    deleted = []
-                else:
-                    # bulk_delete is not a method on TextChannel, use delete_messages instead.
-                    await inter.channel.delete_messages(messages_to_delete)
-                    deleted = messages_to_delete  # The return value is None, so we use our list.
-            else:
-                deleted = await inter.channel.purge(**purge_kwargs)
-
-            # Send public emoji confirmation if not on cooldown
-            current_time = time.time()
-            if current_time - self._last_purge_timestamp > 180:  # 3 minutes
-                await inter.channel.send(
-                    "<:purge:1422343889100083200><:purgy:1422343933220093952>"
-                )
-                self._last_purge_timestamp = current_time
-
-            # Send ephemeral confirmation
-            if response_type == "default":
-                msg = f"Deleted {len(deleted)} message(s)"
-                if user:
-                    msg += f" from {str(user)}."
-                await inter.followup.send(msg, ephemeral=True)
-            else:  # from_message
-                await inter.followup.send(
-                    f"Deleted {len(deleted)} message(s).", ephemeral=True
-                )
-
-        except disnake.Forbidden:
-            await inter.followup.send(
-                "I don't have permission to delete messages.", ephemeral=True
+        # if user id then only delete from that
+        if user:
+            deleted = await inter.channel.purge(
+                **kwargs, check=lambda m: m.author.id == user.id
             )
-        except disnake.HTTPException as e:
-            await inter.followup.send(f"Failed to delete messages: {e}", ephemeral=True)
+        else:
+            deleted = await inter.channel.purge(**kwargs)
+
+        # TODO: get from config
+        await inter.channel.send(
+            "<:purge:1422343889100083200><:purgy:1422343933220093952>"
+        )
+
+        msg = f"-# Deleted {len(deleted)} message"
+        if len(deleted) > 1:
+            msg += "s"
+        if user:
+            msg += f" from {str(user)}."
+        await inter.followup.send(msg)
 
     @commands.slash_command(
         name="purge",
-        description="Delete multiple messages at once",
+        description="Mass delete messages",
         default_member_permissions=disnake.Permissions(manage_messages=True),
     )
     @Logger
@@ -93,22 +66,31 @@ class ModerationCog(commands.Cog):
         user: disnake.User = commands.Param(
             default=None, description="Only delete messages from this user"
         ),
+        messageid: int = commands.Param(
+            default=None, description="Only delete messages after this message"
+        ),
     ):
         await inter.response.defer(ephemeral=True)
 
-        # Check if amount is valid
-        if amount < 1 or amount > 1000:
+        if amount < 1 or amount > 100:
             await inter.followup.send(
-                "Please specify a number between 1 and 1,000", ephemeral=True
+                "Please specify a number between 1 and 100", ephemeral=True
             )
             return
 
-        # Create check function if user is specified
-        def check(msg):
-            return user is None or msg.author.id == user.id
-
-        # Delete messages
-        await self._perform_purge(inter, user=user, limit=amount, check=check)
+        if messageid:
+            await self._purge_(
+                inter,
+                user=user,
+                limit=amount,
+                after=messageid.created_at - timedelta(microseconds=1),
+            )
+        else:
+            await self._purge_(
+                inter,
+                user=user,
+                limit=amount,
+            )
 
     @commands.message_command(
         name="purge",
@@ -122,15 +104,9 @@ class ModerationCog(commands.Cog):
         inter: disnake.ApplicationCommandInteraction,
         message: disnake.Message,
     ):
-        """Deletes the selected message and all messages below it."""
         await inter.response.defer(ephemeral=True)
-
-        # Purge messages after the target message, including the message itself.
-        # The `after` parameter is exclusive, so we find messages sent after the
-        # target message's creation time.
-        await self._perform_purge(
+        await self._purge_(
             inter,
-            response_type="from_message",
             limit=None,
             after=message.created_at - timedelta(microseconds=1),
             oldest_first=False,
@@ -176,83 +152,138 @@ class ModerationCog(commands.Cog):
             )
         except disnake.HTTPException as e:
             await inter.response.send_message(
-                f"Failed to timeout user: {str(e)}", ephemeral=True
-            )
-
-    # TODO: make it select which challenge it's for
-    @commands.message_command(name="Solution")
-    @Logger
-    async def mark_solution(
-        self, inter: disnake.ApplicationCommandInteraction, message: disnake.Message
-    ):
-        # Check if channel is in the correct category
-        if inter.channel.category_id != 1385339846117294110:
-            await inter.response.send_message(
-                "This command can only be used in the ticket category", ephemeral=True
-            )
-            return
-
-        try:
-            await Database.add_solution(
-                channel_id=inter.channel.id,
-                message_id=message.id,
-                user_id=message.author.id,
-                marked_by=inter.author.id,
-            )
-
-            # Create a cleaner message reference
-            jump_url = message.jump_url
-            await inter.response.send_message(
-                f"✅ Marked [this message]({jump_url}) as solution",
-                ephemeral=True,
-            )
-
-        except Exception as e:
-            await inter.response.send_message(
-                f"Failed to mark solution: {str(e)}", ephemeral=True
+                f"Failed to timeout user: {e}", ephemeral=True
             )
 
     @commands.slash_command(
-        name="solutions",
-        description="Get the solutions in this channel",
+        name="ban",
+        description="Ban a user",
+        default_member_permissions=disnake.Permissions(ban_members=True),
     )
     @Logger
-    async def get_solutions(self, inter: disnake.ApplicationCommandInteraction):
-        # Check if channel is in the correct category
-        if inter.channel.category_id != 1385339846117294110:
+    @commands.cooldown(1, 5, commands.BucketType.user)
+    @commands.guild_only()
+    async def ban(
+        self,
+        inter: disnake.ApplicationCommandInteraction,
+        user: disnake.Member = commands.Param(description="User to ban"),
+        reason: str = commands.Param(description="Reason for ban"),
+    ):
+        # can we ban this user?
+        if not isinstance(user, disnake.Member):
             await inter.response.send_message(
-                "This command can only be used in the ticket category", ephemeral=True
+                "This command only works on server members", ephemeral=True
+            )
+            return
+
+        if user.top_role >= inter.author.top_role:
+            await inter.response.send_message(
+                "You cannot ban someone with a higher or equal role", ephemeral=True
             )
             return
 
         try:
-            solutions = await Database.get_solutions(channel_id=inter.channel.id)
-
-            if not solutions:
-                await inter.response.send_message(
-                    "No solutions have been marked yet", ephemeral=True
-                )
-                return
-
-            # Format solutions nicely
-            messages = []
-            for solution in solutions:
-                channel = inter.channel
-                message = await channel.fetch_message(solution["message_id"])
-                if message:
-                    message_link = f"https://discord.com/channels/{inter.guild.id}/{channel.id}/{message.id}"
-                    messages.append(f"[{message.content}]({message_link})")
-
-            solutions_text = "\n".join(f"• {msg}" for msg in messages)
-
+            await user.ban(reason=reason)
             await inter.response.send_message(
-                f"**Solutions in this channel:**\n{solutions_text}", ephemeral=True
+                f"{user.mention} has been banned\nReason: {reason}"
             )
 
-        except Exception as e:
+        except disnake.Forbidden:
             await inter.response.send_message(
-                f"Failed to get solutions: {str(e)}", ephemeral=True
+                "I don't have permission to ban this user", ephemeral=True
             )
+        except disnake.HTTPException as e:
+            await inter.response.send_message(
+                f"Failed to ban user: {e}", ephemeral=True
+            )
+
+    @commands.slash_command(
+        name="lock",
+        description="Lock the channel",
+        default_member_permissions=disnake.Permissions(manage_channels=True),
+    )
+    @Logger
+    @commands.cooldown(1, 5, commands.BucketType.user)
+    @commands.guild_only()
+    async def lock(
+        self,
+        inter: disnake.ApplicationCommandInteraction,
+        reason: str = commands.Param(description="Reason"),
+    ):
+        await inter.response.defer(ephemeral=True)
+
+        # save it so we don't perma lock it
+        self.locked_channels[inter.channel.id] = {
+            "overwrites": {
+                target: overwrite.copy()
+                for target, overwrite in inter.channel.overwrites.items()
+            },
+            "reason": reason,
+        }
+
+        # make it so @everyone can't send messages
+        everyone_overwrite = inter.channel.overwrites_for(inter.guild.default_role)
+        everyone_overwrite.send_messages = False
+        await inter.channel.set_permissions(
+            inter.guild.default_role, overwrite=everyone_overwrite
+        )
+
+        # make it so only @moderators and @admins can send messages
+        for target, overwrite in inter.channel.overwrites.items():
+            if isinstance(target, disnake.Role) and target.id not in MODERATOR_ROLE_IDS:
+                overwrite.send_messages = False
+                await inter.channel.set_permissions(target, overwrite=overwrite)
+
+        embed = disnake.Embed(
+            title="🔒 Channel Locked",
+            description=disnake.utils.escape_markdown(str(reason)),
+            color=COLOR_RED,
+        )
+        embed.set_author(
+            name=str(inter.author),  # starry does string safety for the first time /s
+            icon_url=str(inter.author.avatar.url),
+        )
+
+        await inter.followup.send(embed=embed)
+
+    @commands.slash_command(
+        name="unlock",
+        description="Unlock the channel",
+        default_member_permissions=disnake.Permissions(manage_channels=True),
+    )
+    @Logger
+    @commands.cooldown(1, 5, commands.BucketType.user)
+    @commands.guild_only()
+    async def unlock(
+        self,
+        inter: disnake.ApplicationCommandInteraction,
+    ):
+        await inter.response.defer(ephemeral=True)
+
+        lock_data = self.locked_channels.pop(inter.channel.id, None)
+
+        if lock_data is None:
+            await inter.followup.send(
+                "This channel was not locked by me or has already been unlocked.",
+                ephemeral=True,
+            )
+            return
+
+        original_overwrites = lock_data["overwrites"]
+        original_reason = lock_data.get("reason", "No reason provided.")
+
+        await inter.channel.edit(
+            overwrites=original_overwrites,
+            reason=f"Unlock command by {inter.author}",
+        )
+
+        embed = disnake.Embed(
+            title="🔓 Channel Unlocked",
+            description=f"Locking reason: {disnake.utils.escape_markdown(original_reason)}",  # lol I found a new function
+            color=COLOR_GREEN,
+        )
+        embed.set_author(name=str(inter.author), icon_url=str(inter.author.avatar.url))
+        await inter.followup.send(embed=embed)
 
 
 def setup(bot):

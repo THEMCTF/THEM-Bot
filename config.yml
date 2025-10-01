@@ -32,6 +32,10 @@ admin_user_ids:
   - 860215950866645023
   - 949621988719202306
 
+moderator_roles:
+ - 1382763556792963103
+ - 1382763556792963102
+
 # Rate limiting (in seconds)
 cooldowns:
   default: 60  # Default cooldown if not specified
