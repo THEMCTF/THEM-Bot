@@ -38,7 +38,8 @@ moderator_roles:
 
 # Emojis
 purged_emoji: "<:purge:1422343889100083200><:purgy:1422343933220093952>"
-
+locked_emoji: "🔒"
+unlocked_emoji: "🔓"
 
 # Embed colors
 colors:

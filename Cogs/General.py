@@ -1,14 +1,6 @@
-# import json
-
-import os
-import time
-
 import disnake
 import yaml
 from disnake.ext import commands
-
-from Modules.CooldownManager import dynamic_cooldown
-from Modules.Logger import Logger
 
 
 class GeneralCog(commands.Cog):

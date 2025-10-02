@@ -22,6 +22,8 @@ with open(config_path, "r") as f:
     COLOR_GREEN = COLORS.get("green", 0x78B159)
     PURGED_EMOJI = config.get("purged_emoji")
     BANNED_GIF_TERM = config.get("banned_gif_term")
+    LOCKED_EMOJI = config.get("locked_emoji")
+    UNLOCKED_EMOJI = config.get("unlocked_emoji")
 
 # use dotenv to get the api key for tenor
 dotenv.load_dotenv()
@@ -259,7 +261,7 @@ class ModerationCog(commands.Cog):
                 await inter.channel.set_permissions(target, overwrite=overwrite)
 
         embed = disnake.Embed(
-            title="🔒 Channel Locked",
+            title=f"{LOCKED_EMOJI} Channel Locked",
             description=disnake.utils.escape_markdown(str(reason)),
             color=COLOR_RED,
         )
@@ -302,7 +304,7 @@ class ModerationCog(commands.Cog):
         )
 
         embed = disnake.Embed(
-            title="🔓 Channel Unlocked",
+            title=f"{UNLOCKED_EMOJI} Channel Unlocked",
             description=f"Locking reason: {disnake.utils.escape_markdown(original_reason)}",  # lol I found a new function
             color=COLOR_GREEN,
         )
