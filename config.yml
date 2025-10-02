@@ -36,6 +36,21 @@ moderator_roles:
  - 1382763556792963103
  - 1382763556792963102
 
+# Emojis
+purged_emoji: "<:purge:1422343889100083200><:purgy:1422343933220093952>"
+
+
+# Embed colors
+colors:
+  red: 0xDD2E44
+  green: 0x78B159
+  yellow: 0xFFD166
+  blue: 0x4EA8DE
+  purple: 0x9B5DE5
+  orange: 0xF15BB5
+  pink: 0xFF6F91
+  gray: 0xAAAAAA
+
 # Rate limiting (in seconds)
 cooldowns:
   default: 60  # Default cooldown if not specified

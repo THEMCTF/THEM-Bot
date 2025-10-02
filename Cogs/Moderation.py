@@ -1,8 +1,11 @@
+import asyncio
 import os
-import time
+import random
 from datetime import datetime, timedelta, timezone
 
+import aiohttp
 import disnake
+import dotenv
 import yaml
 from disnake.ext import commands
 
@@ -17,6 +20,12 @@ with open(config_path, "r") as f:
     COLORS = config.get("colors", {})
     COLOR_RED = COLORS.get("red", 0xDD2E44)
     COLOR_GREEN = COLORS.get("green", 0x78B159)
+    PURGED_EMOJI = config.get("purged_emoji")
+    BANNED_GIF_TERM = config.get("banned_gif_term")
+
+# use dotenv to get the api key for tenor
+dotenv.load_dotenv()
+TENOR_API_KEY = os.getenv("TENOR_API_KEY")
 
 
 class ModerationCog(commands.Cog):
@@ -39,10 +48,7 @@ class ModerationCog(commands.Cog):
         else:
             deleted = await inter.channel.purge(**kwargs)
 
-        # TODO: get from config
-        await inter.channel.send(
-            "<:purge:1422343889100083200><:purgy:1422343933220093952>"
-        )
+        await inter.channel.send(PURGED_EMOJI)
 
         msg = f"-# Deleted {len(deleted)} message"
         if len(deleted) > 1:
@@ -183,10 +189,28 @@ class ModerationCog(commands.Cog):
             return
 
         try:
+            gif_url = None
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    "https://g.tenor.com/v1/search",
+                    params={
+                        "q": BANNED_GIF_TERM,
+                        "key": TENOR_API_KEY,
+                        "limit": 50,
+                    },
+                ) as r:
+                    if r.status == 200:
+                        data = await r.json()
+                        if data["results"]:
+                            gif_url = random.choice(data["results"])["media"][0]["gif"][
+                                "url"
+                            ]
+
+            await inter.response.send_message(gif_url)
+            await asyncio.sleep(10)
+            # wait 10 seconds before banning so they see the message
             await user.ban(reason=reason)
-            await inter.response.send_message(
-                f"{user.mention} has been banned\nReason: {reason}"
-            )
+            await inter.followup.send(f"-# {reason}")
 
         except disnake.Forbidden:
             await inter.response.send_message(
