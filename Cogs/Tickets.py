@@ -1,22 +1,71 @@
+import disnake
+from disnake.ext import commands
+
+from Modules.Logger import Logger
+
+
+class TicketCog(commands.Cog):
+    def __init__(self, bot, db, config):
+        self.bot = bot
+        self.db = db
+        self.config = config
+
+    async def _add_solution_(self, channel_id, message, marked_by):
+        if "solutions" not in await self.db.list_tables():
+            await self.db.create_table(
+                "solutions",
+                [
+                    ("channel_id", "BIGINT"),
+                    ("message_id", "BIGINT"),
+                    ("marked_by", "BIGINT"),
+                    ("timestamp", "TIMESTAMP"),
+                ],
+            )
+
+        await self.db.add_to_table(
+            "solutions",
+            [
+                channel_id,
+                message.id,
+                marked_by,
+                message.created_at,
+            ],
+            start_row="next",
+            direction="row",
+        )
+
+    async def _get_solutions_(self, channel_id):
+        if "solutions" not in await self.db.list_tables():
+            return FileNotFoundError("No solutions table found")
+
+        solutions = await self.db.find_rows(
+            "solutions",
+            column_name="channel_id",
+            value=channel_id,
+        )
+        # just return the message ids
+        return [row["message_id"] for row in solutions]
 
     # TODO: make it select which challenge it's for
-    @commands.message_command(name="Solution")
+    @commands.message_command(
+        name="Solution",
+        default_member_permissions=disnake.Permissions(manage_messages=True),
+    )
     @Logger
     async def mark_solution(
         self, inter: disnake.ApplicationCommandInteraction, message: disnake.Message
     ):
         # Check if channel is in the correct category
-        if inter.channel.category_id != 1385339846117294110:
+        if inter.channel.category_id != self.config.get("ticket_category_id"):
             await inter.response.send_message(
                 "This command can only be used in the ticket category", ephemeral=True
             )
             return
 
         try:
-            await Database.add_solution(
+            await self._add_solution_(
                 channel_id=inter.channel.id,
-                message_id=message.id,
-                user_id=message.author.id,
+                message=message,
                 marked_by=inter.author.id,
             )
 
@@ -35,18 +84,19 @@
     @commands.slash_command(
         name="solutions",
         description="Get the solutions in this channel",
+        default_member_permissions=disnake.Permissions(manage_messages=True),
     )
     @Logger
     async def get_solutions(self, inter: disnake.ApplicationCommandInteraction):
         # Check if channel is in the correct category
-        if inter.channel.category_id != 1385339846117294110:
+        if inter.channel.category_id != self.config.get("ticket_category_id"):
             await inter.response.send_message(
                 "This command can only be used in the ticket category", ephemeral=True
             )
             return
 
         try:
-            solutions = await Database.get_solutions(channel_id=inter.channel.id)
+            solutions = await self._get_solutions_(channel_id=inter.channel.id)
 
             if not solutions:
                 await inter.response.send_message(
@@ -73,3 +123,7 @@
             await inter.response.send_message(
                 f"Failed to get solutions: {str(e)}", ephemeral=True
             )
+
+
+def setup(bot):
+    bot.add_cog(TicketCog(bot, bot.db, bot.config))

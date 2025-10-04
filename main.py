@@ -8,6 +8,8 @@ import yaml
 from disnake.ext import commands
 from dotenv import load_dotenv
 
+from Modules.Database import Database
+
 photo = """\033[32m hi\033[0m"""
 
 print(photo)
@@ -25,58 +27,46 @@ config_path = os.path.join(current_dir, "config.yml")
 config_path = os.path.normpath(config_path)
 
 with open(config_path, "r") as f:
-    data = yaml.safe_load(f)
-    GUILD_ID = data.get("guild_id")
-    list_startup = data.get("list_startup", False)
+    config = yaml.safe_load(f)
 
 
-from Modules.Database import Database
+class HER(commands.InteractionBot):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.launch_time = time.time()
+        self.db = Database()
+        self.config = config
 
-# Create the bot without a command prefix since we're using ONLY slash commands.
-bot = commands.InteractionBot(intents=disnake.Intents.all())
-bot.launch_time = time.time()  # Track when the bot started
+    # Cogs will be loaded in on_ready to ensure bot is fully connected.
+    async def load_all_cogs(self):
+        """Loads all cogs in parallel."""
+        cogs_to_load = [
+            "Cogs.General",
+            "Cogs.Tickets",
+            "Cogs.Moderation",
+            # "Cogs.Responder",
+            # "Cogs.CTFtime",
+            # "Cogs.CTFother",
+        ]
 
+        print("\nLoading cogs...")
+        loaded_count = 0
+        for cog in cogs_to_load:
+            try:
+                self.load_extension(cog)
+                print(f"\033[32mLoaded {cog}\033[0m")
+                loaded_count += 1
+            except Exception as e:
+                print(f"\033[31mFailed to load extension {cog}: {e}\033[0m")
+            else:
+                pass  # Already printed success
 
-# Load cogs in parallel for faster startup
-async def load_cogs():
-    cogs = [
-        "Cogs.General",  # General commands
-        "Cogs.Responder",  # Responder
-        "Cogs.Moderation",
-        "Cogs.CTFtime",
-        "Cogs.CTFother",
-    ]
-
-    async def load_cog(cog):
-        try:
-            bot.load_extension(cog)
-            print(f"\033[32mLoaded {cog}\033[0m")
-            return True
-        except Exception as e:
-            print(f"\033[31mFailed to load extension {cog}: {e}\033[0m")
-            return False
-
-    print("Loading cogs...")
-    # Load all cogs concurrently with progress tracking
-    results = await asyncio.gather(*[load_cog(cog) for cog in cogs])
-    loaded = sum(1 for r in results if r)
-    print(f"\033[32mSuccessfully loaded {loaded}/{len(cogs)} cogs\033[0m")
-
-
-# Initialize bot startup
-async def init_bot():
-    print("Starting bot initialization...")
-
-    # Initialize database first
-    print("Initializing database...")
-
-    # Then load cogs
-    await load_cogs()
+        print(
+            f"\033[32mSuccessfully loaded {loaded_count}/{len(cogs_to_load)} cogs\033[0m"
+        )
 
 
-# Load cogs and initialize bot
-loop = asyncio.get_event_loop()
-loop.run_until_complete(init_bot())
+bot = HER(intents=disnake.Intents.all())
 
 
 async def get_servers():
@@ -111,12 +101,26 @@ async def get_servers():
 
 @bot.event
 async def on_ready():
+    # Prevent setup from running more than once
+    if not bot.is_ready() or bot.is_closed():
+        return
+    if hasattr(bot, "_has_been_ready"):
+        return
+    bot._has_been_ready = True
     # Start timing after connection is established
     startup_time = time.time() - bot.launch_time
 
-    # Initialize database, logger, and any other async startup tasks concurrently
+    # Initialize database and other async startup tasks
     try:
         print("Initializing services...")
+
+        # Load cogs now that the bot is fully ready
+        await bot.load_all_cogs()
+
+        # Connect to database
+        await bot.db.connect()
+        db_status = "✅" if bot.db.pool else "❌"
+        print(f"Database connection: {db_status}")
 
         # Ensure data directory exists
         data_dir = os.path.join(os.path.dirname(__file__), "data")
@@ -126,7 +130,7 @@ async def on_ready():
         status_parts = [
             f"Connected as: {bot.user}",
             f"Startup time: {startup_time:.2f}s",
-            f"Database: {'✅' if Database.conn else '❌'}",
+            f"Database: {db_status}",
             f"Active cogs: {len(bot.cogs)}",
             f"Data directory: {'✅' if os.path.exists(data_dir) else '❌'}",
         ]
@@ -140,9 +144,57 @@ async def on_ready():
             with open(os.path.join(data_dir, "bot_logs.json"), "w") as f:
                 f.write("[]")
 
+        # Optional: List servers if configured
+        if bot.config.get("list_startup", False):
+            await get_servers()
+
     except Exception as e:
         print(f"\033[31mFailed to initialize services: {e}\033[0m")
 
 
-# Run the bot and monitor the file concurrently
-bot.run(TOKEN)
+@bot.event
+async def on_disconnect():
+    """Clean up when bot disconnects (temporary disconnects)"""
+    print("Bot temporarily disconnected...")
+    # Don't close database on temporary disconnects - it will reconnect
+
+
+async def shutdown():
+    """Graceful shutdown procedure"""
+    print("\n\033[33m=== Shutting down bot ===\033[0m")
+    try:
+        # Close database connection
+        if bot.db and bot.db.pool:
+            await bot.db.close()
+            print("✓ Database connection closed")
+
+        # Close bot connection
+        await bot.close()
+        print("✓ Bot connection closed")
+
+        print("\033[32m✓ Shutdown complete\033[0m")
+    except Exception as e:
+        print(f"\033[31mError during shutdown: {e}\033[0m")
+
+
+# Run the bot with proper error handling
+async def main():
+    try:
+        await bot.start(TOKEN)
+    except KeyboardInterrupt:
+        print("\n\033[33mReceived keyboard interrupt...\033[0m")
+    except Exception as e:
+        print(f"\033[31m\nBot crashed: {e}\033[0m")
+        import traceback
+
+        traceback.print_exc()
+    finally:
+        # Always clean up, regardless of how we exit
+        await shutdown()
+
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\n\033[33mForced shutdown\033[0m")

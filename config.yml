@@ -3,8 +3,9 @@ guild_id: 1382763556642099240
 announcements: 1382763557640470615
 list_startup: false
 read_dms_on_start: true
+banned_gif_term: "banned"
 
-# Channel restrictions
+# Channels
 restricted_channels:
   - 1382763557640470615  # announcements
   - 1389155950002311219  # tip of the day
@@ -16,6 +17,9 @@ restricted_channels:
   - 1385022337715277955  # apply for member
   - 1385340123406930081  # transcripts
   - 1382763558000918577  # mod logs
+ticket_category_id: 1385339846117294110
+member_category_id: 1422562737208168508
+archive_category_id: 1385002767382347776
 
 # Logging configuration
 logging_channel: 1382763558000918577
@@ -40,6 +44,7 @@ moderator_roles:
 purged_emoji: "<:purge:1422343889100083200><:purgy:1422343933220093952>"
 locked_emoji: "🔒"
 unlocked_emoji: "🔓"
+
 
 # Embed colors
 colors:

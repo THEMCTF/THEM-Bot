@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import random
 from datetime import datetime, timedelta, timezone
@@ -6,24 +7,9 @@ from datetime import datetime, timedelta, timezone
 import aiohttp
 import disnake
 import dotenv
-import yaml
 from disnake.ext import commands
 
-# --- Configuration Loading ---
-current_dir = os.path.dirname(os.path.abspath(__file__))
-config_path = os.path.join(current_dir, "..", "config.yml")
-config_path = os.path.normpath(config_path)
-
-with open(config_path, "r") as f:
-    config = yaml.safe_load(f)
-    MODERATOR_ROLE_IDS = config.get("moderator_roles", [])
-    COLORS = config.get("colors", {})
-    COLOR_RED = COLORS.get("red", 0xDD2E44)
-    COLOR_GREEN = COLORS.get("green", 0x78B159)
-    PURGED_EMOJI = config.get("purged_emoji")
-    BANNED_GIF_TERM = config.get("banned_gif_term")
-    LOCKED_EMOJI = config.get("locked_emoji")
-    UNLOCKED_EMOJI = config.get("unlocked_emoji")
+from Modules.Logger import Logger
 
 # use dotenv to get the api key for tenor
 dotenv.load_dotenv()
@@ -31,10 +17,19 @@ TENOR_API_KEY = os.getenv("TENOR_API_KEY")
 
 
 class ModerationCog(commands.Cog):
-    def __init__(self, bot):
+    def __init__(self, bot, db, config):
         self.bot = bot
+        self.db = db
+        self.config = config
+
+        # Load constants from config
+        self.colors = self.config.get("colors", {})
+        self.LOCKED_EMOJI = self.config.get("locked_emoji", "🔒")
+        self.UNLOCKED_EMOJI = self.config.get("unlocked_emoji", "🔓")
+        self.COLOR_RED = self.colors.get("red", 0xDD2E44)
+        self.MODERATOR_ROLE_IDS = set(self.config.get("moderator_roles", []))
+
         self._last_purge_timestamp: float = 0
-        self.locked_channels: dict[int, dict] = {}
 
     async def _purge_(
         self,
@@ -50,7 +45,7 @@ class ModerationCog(commands.Cog):
         else:
             deleted = await inter.channel.purge(**kwargs)
 
-        await inter.channel.send(PURGED_EMOJI)
+        await inter.channel.send(self.config.get("purged_emoji"))
 
         msg = f"-# Deleted {len(deleted)} message"
         if len(deleted) > 1:
@@ -191,37 +186,50 @@ class ModerationCog(commands.Cog):
             return
 
         try:
-            gif_url = None
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    "https://g.tenor.com/v1/search",
-                    params={
-                        "q": BANNED_GIF_TERM,
-                        "key": TENOR_API_KEY,
-                        "limit": 50,
-                    },
-                ) as r:
-                    if r.status == 200:
-                        data = await r.json()
-                        if data["results"]:
-                            gif_url = random.choice(data["results"])["media"][0]["gif"][
-                                "url"
-                            ]
+            await inter.response.defer(ephemeral=True)
+            banned_gif_term = self.config.get("banned_gif_term")
 
-            await inter.response.send_message(gif_url)
-            await asyncio.sleep(10)
-            # wait 10 seconds before banning so they see the message
+            gif_url = None
+            if banned_gif_term and TENOR_API_KEY:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(
+                        "https://tenor.googleapis.com/v2/search",
+                        params={
+                            "q": banned_gif_term,
+                            "key": TENOR_API_KEY,
+                            "limit": 50,
+                            "media_filter": "gif",
+                        },
+                    ) as r:
+                        if r.status == 200:
+                            data = await r.json()
+                            if data.get("results"):
+                                gif_url = random.choice(data["results"])[
+                                    "media_formats"
+                                ]["gif"]["url"]
+                        else:
+                            print(
+                                f"Tenor API request failed with status {r.status}: {await r.text()}"
+                            )
+
+            torture_message = await inter.followup.send("Torturing...")
+
+            if gif_url:
+                await inter.channel.send(gif_url)
+                await asyncio.sleep(10)
+
             await user.ban(reason=reason)
-            await inter.followup.send(f"-# {reason}")
+
+            await inter.channel.send(
+                content=f"-# {user.mention} has been banned. Reason: {reason}"
+            )
 
         except disnake.Forbidden:
-            await inter.response.send_message(
+            await inter.followup.send(
                 "I don't have permission to ban this user", ephemeral=True
             )
         except disnake.HTTPException as e:
-            await inter.response.send_message(
-                f"Failed to ban user: {e}", ephemeral=True
-            )
+            await inter.followup.send(f"Failed to ban user: {e}", ephemeral=True)
 
     @commands.slash_command(
         name="lock",
@@ -236,16 +244,40 @@ class ModerationCog(commands.Cog):
         inter: disnake.ApplicationCommandInteraction,
         reason: str = commands.Param(description="Reason"),
     ):
-        await inter.response.defer(ephemeral=True)
+        await inter.response.defer()
 
-        # save it so we don't perma lock it
-        self.locked_channels[inter.channel.id] = {
-            "overwrites": {
-                target: overwrite.copy()
-                for target, overwrite in inter.channel.overwrites.items()
-            },
-            "reason": reason,
+        # Ensure the locked_channels table exists with the correct schema
+        await self.db.create_table(
+            "locked_channels",
+            [
+                ("channel_id", "BIGINT"),
+                ("overwrites", "TEXT"),
+                ("reason", "TEXT"),
+            ],
+        )
+
+        # Check if channel is already locked in the DB
+        existing = await self.db.find_rows(
+            table_name="locked_channels",
+            column_name="channel_id",
+            value=inter.channel.id,
+        )
+        if existing:
+            await inter.followup.send("This channel is already locked.")
+            return
+
+        serializable_overwrites = {
+            str(target.id): tuple(p.value for p in overwrite.pair())
+            for target, overwrite in inter.channel.overwrites.items()
         }
+        overwrites_json = json.dumps(serializable_overwrites)
+
+        await self.db.add_to_table(
+            "locked_channels",
+            [inter.channel.id, overwrites_json, reason],
+            start_row="next",
+            direction="row",  # start_col=1 is the default
+        )
 
         # make it so @everyone can't send messages
         everyone_overwrite = inter.channel.overwrites_for(inter.guild.default_role)
@@ -256,21 +288,24 @@ class ModerationCog(commands.Cog):
 
         # make it so only @moderators and @admins can send messages
         for target, overwrite in inter.channel.overwrites.items():
-            if isinstance(target, disnake.Role) and target.id not in MODERATOR_ROLE_IDS:
+            if (
+                isinstance(target, disnake.Role)
+                and target.id not in self.MODERATOR_ROLE_IDS
+            ):
                 overwrite.send_messages = False
                 await inter.channel.set_permissions(target, overwrite=overwrite)
 
         embed = disnake.Embed(
-            title=f"{LOCKED_EMOJI} Channel Locked",
+            title=f"{self.LOCKED_EMOJI} Channel Locked",
             description=disnake.utils.escape_markdown(str(reason)),
-            color=COLOR_RED,
+            color=self.COLOR_RED,
         )
         embed.set_author(
             name=str(inter.author),  # starry does string safety for the first time /s
             icon_url=str(inter.author.avatar.url),
         )
 
-        await inter.followup.send(embed=embed)
+        await inter.channel.send(embed=embed)
 
     @commands.slash_command(
         name="unlock",
@@ -284,33 +319,52 @@ class ModerationCog(commands.Cog):
         self,
         inter: disnake.ApplicationCommandInteraction,
     ):
-        await inter.response.defer(ephemeral=True)
+        await inter.response.defer()
+        # Find the lock data in the database
+        lock_rows = await self.db.find_rows(
+            "locked_channels", "channel_id", inter.channel.id
+        )
 
-        lock_data = self.locked_channels.pop(inter.channel.id, None)
-
-        if lock_data is None:
+        if not lock_rows:
             await inter.followup.send(
                 "This channel was not locked by me or has already been unlocked.",
                 ephemeral=True,
             )
             return
 
-        original_overwrites = lock_data["overwrites"]
-        original_reason = lock_data.get("reason", "No reason provided.")
+        lock_data = await self.db.read_table(
+            "locked_channels", start_row=lock_rows[0], start_col=1, num_cols=3
+        )
+        _, overwrites_json, original_reason = lock_data
+
+        # Deserialize overwrites from JSON
+        serializable_overwrites = json.loads(overwrites_json)
+
+        original_overwrites = {
+            inter.guild.get_role(int(target_id))
+            or inter.guild.get_member(
+                int(target_id)
+            ): disnake.PermissionOverwrite.from_pair(
+                disnake.Permissions(pair[0]), disnake.Permissions(pair[1])
+            )
+            for target_id, pair in serializable_overwrites.items()
+        }
 
         await inter.channel.edit(
             overwrites=original_overwrites,
             reason=f"Unlock command by {inter.author}",
         )
 
+        await self.db.delete_rows("locked_channels", lock_rows)
+
         embed = disnake.Embed(
-            title=f"{UNLOCKED_EMOJI} Channel Unlocked",
+            title=f"{self.UNLOCKED_EMOJI} Channel Unlocked",
             description=f"Locking reason: {disnake.utils.escape_markdown(original_reason)}",  # lol I found a new function
-            color=COLOR_GREEN,
+            color=self.colors.get("green", 0x78B159),
         )
         embed.set_author(name=str(inter.author), icon_url=str(inter.author.avatar.url))
         await inter.followup.send(embed=embed)
 
 
 def setup(bot):
-    bot.add_cog(ModerationCog(bot))
+    bot.add_cog(ModerationCog(bot, bot.db, bot.config))

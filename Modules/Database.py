@@ -95,6 +95,159 @@ class Database:
             await conn.execute(query)
             print(f"✓ Table '{table_name}' dropped successfully")
 
+    async def find_rows(
+        self,
+        table_name: str,
+        column_name: str,
+        value: Any,
+    ) -> List[int]:
+        """
+        Find all row IDs where a column matches a specific value.
+
+        Args:
+            table_name: Name of the table to search
+            column_name: Name of the column to search in
+            value: Value to search for
+
+        Returns:
+            List of row IDs that match the criteria
+
+        Example:
+            row_ids = await db.find_rows("solutions", "user_id", 123456789)
+        """
+        if self.pool is None:
+            raise RuntimeError("Database not connected. Call connect() first.")
+
+        async with self.pool.acquire() as conn:
+            if not await self._table_exists(conn, table_name):
+                # If the table doesn't exist, there are no rows to find.
+                return []
+
+            query = (
+                f'SELECT id FROM "{table_name}" WHERE "{column_name}" = $1 ORDER BY id'
+            )
+            rows = await conn.fetch(query, value)
+            return [row["id"] for row in rows]
+
+    async def delete_rows(
+        self,
+        table_name: str,
+        row_ids: Union[int, List[int]],
+        compact: bool = False,
+    ):
+        """
+        Delete specific rows from a table.
+
+        Args:
+            table_name: Name of the table
+            row_ids: Single row ID or list of row IDs to delete
+            compact: If True, renumber remaining rows to fill gaps
+
+        Example:
+            await db.delete_rows("solutions", [1, 3, 5], compact=True)
+        """
+        if self.pool is None:
+            raise RuntimeError("Database not connected. Call connect() first.")
+
+        if isinstance(row_ids, int):
+            row_ids = [row_ids]
+
+        if not row_ids:
+            return
+
+        async with self.pool.acquire() as conn:
+            if not await self._table_exists(conn, table_name):
+                await self.create_table(table_name)
+                print(f"Table '{table_name}' did not exist and was created.")
+
+            async with conn.transaction():
+                # Delete the specified rows
+                query = f'DELETE FROM "{table_name}" WHERE id = ANY($1)'
+                await conn.execute(query, row_ids)
+                print(f"✓ Deleted {len(row_ids)} row(s) from '{table_name}'")
+
+                # Compact if requested
+                if compact:
+                    await self._compact_table(conn, table_name)
+
+    async def delete_where(
+        self,
+        table_name: str,
+        column_name: str,
+        value: Any,
+        compact: bool = False,
+    ):
+        """
+        Delete all rows where a column matches a value.
+
+        Args:
+            table_name: Name of the table
+            column_name: Column to check
+            value: Value to match
+            compact: If True, renumber remaining rows to fill gaps
+
+        Example:
+            # Delete all solutions by user 123456789
+            await db.delete_where("solutions", "user_id", 123456789, compact=True)
+        """
+        if self.pool is None:
+            raise RuntimeError("Database not connected. Call connect() first.")
+
+        async with self.pool.acquire() as conn:
+            if not await self._table_exists(conn, table_name):
+                await self.create_table(table_name)
+                print(f"Table '{table_name}' did not exist and was created.")
+
+            async with conn.transaction():
+                # Delete matching rows
+                query = f'DELETE FROM "{table_name}" WHERE "{column_name}" = $1'
+                result = await conn.execute(query, value)
+
+                # Extract number of deleted rows from result string like "DELETE 3"
+                deleted_count = int(result.split()[-1]) if result.split() else 0
+                print(
+                    f"✓ Deleted {deleted_count} row(s) from '{table_name}' where {column_name} = {value}"
+                )
+
+                # Compact if requested
+                if compact:
+                    await self._compact_table(conn, table_name)
+
+    async def _compact_table(self, conn: asyncpg.Connection, table_name: str):
+        """
+        Renumber row IDs to remove gaps (1, 2, 3, 4, ...).
+        This is called internally after deletions when compact=True.
+        """
+        # Get all remaining rows in order
+        rows = await conn.fetch(f'SELECT * FROM "{table_name}" ORDER BY id')
+
+        if not rows:
+            # Reset sequence to 1 if table is empty
+            await conn.execute(f'ALTER SEQUENCE "{table_name}_id_seq" RESTART WITH 1')
+            print(f"✓ Table '{table_name}' is now empty, sequence reset")
+            return
+
+        # Get column names (excluding id)
+        column_names = await self._get_column_names(conn, table_name)
+
+        # Delete all rows
+        await conn.execute(f'DELETE FROM "{table_name}"')
+
+        # Reset the sequence
+        await conn.execute(f'ALTER SEQUENCE "{table_name}_id_seq" RESTART WITH 1')
+
+        # Re-insert rows with new sequential IDs
+        if column_names:
+            col_list = ", ".join([f'"{col}"' for col in column_names])
+            placeholders = ", ".join([f"${i+1}" for i in range(len(column_names))])
+            query = f'INSERT INTO "{table_name}" ({col_list}) VALUES ({placeholders})'
+
+            for row in rows:
+                values = [row[col] for col in column_names]
+                await conn.execute(query, *values)
+
+        print(f"✓ Compacted '{table_name}': renumbered {len(rows)} row(s)")
+
     async def list_tables(self) -> List[str]:
         """List all tables in the database."""
         if self.pool is None:
@@ -196,7 +349,8 @@ class Database:
         async with self.pool.acquire() as conn:
             # Check if table exists
             if not await self._table_exists(conn, table_name):
-                raise ValueError(f"Table '{table_name}' does not exist")
+                await self.create_table(table_name)
+                print(f"Table '{table_name}' did not exist and was created.")
 
             column_names = await self._get_column_names(conn, table_name)
 
@@ -205,12 +359,12 @@ class Database:
                     f"Table '{table_name}' has no columns (excluding 'id')"
                 )
 
-            # Handle "next" or None for start_row
-            if start_row is None or start_row == "next":
+            # Handle "next" for start_row
+            if str(start_row).lower() == "next":
                 start_row = await self._get_next_row_id(conn, table_name)
 
             # Handle "next" for start_col (not common, but supported)
-            if start_col == "next":
+            if str(start_col).lower() == "next":
                 start_col = 1  # Default to first column for "next"
 
             if start_col < 1 or start_col > len(column_names):
@@ -321,7 +475,8 @@ class Database:
         async with self.pool.acquire() as conn:
             # Check if table exists
             if not await self._table_exists(conn, table_name):
-                raise ValueError(f"Table '{table_name}' does not exist")
+                await self.create_table(table_name)
+                print(f"Table '{table_name}' did not exist and was created.")
 
             column_names = await self._get_column_names(conn, table_name)
 
@@ -439,6 +594,24 @@ async def main():
             "users", start_row=1, start_col=1, num_rows=2, num_cols=3
         )
         print(f"Grid: {grid}")
+
+        # --- NEW: Search and Delete Examples ---
+
+        # Find all rows where first_name is "John"
+        john_rows = await db.find_rows("users", "first_name", "John")
+        print(f"Rows with John: {john_rows}")
+
+        # Delete specific rows by ID
+        await db.delete_rows("users", [2, 4], compact=False)
+
+        # Delete all rows where age is 30, and compact the table
+        await db.delete_where("users", "age", 30, compact=True)
+
+        print("\n=== Discord Bot Example ===")
+        # For your Discord bot - delete all solutions by a user:
+        # user_id = message.author.id
+        # await db.delete_where("solutions", "user_id", user_id, compact=True)
+        print("See commented code above for Discord bot usage")
 
         # Clean up (optional)
         # await db.drop_table("users")
