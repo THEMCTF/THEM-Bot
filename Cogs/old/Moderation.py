@@ -5,7 +5,7 @@ import disnake
 from disnake.ext import commands
 
 from Modules.Database import Database  # For ticket solutions
-from Modules.Logger import Logger
+from Modules.old.Logger import Logger
 
 
 class ModerationCog(commands.Cog):

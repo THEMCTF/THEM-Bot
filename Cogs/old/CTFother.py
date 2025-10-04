@@ -13,7 +13,7 @@ from googleapiclient.errors import HttpError
 
 from Modules.CooldownManager import dynamic_cooldown
 from Modules.Database import Database
-from Modules.Logger import Logger
+from Modules.old.Logger import Logger
 
 # --- Configuration Loading ---
 current_dir = os.path.dirname(os.path.abspath(__file__))

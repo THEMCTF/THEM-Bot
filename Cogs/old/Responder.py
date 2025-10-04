@@ -10,7 +10,7 @@ import yaml
 from disnake.ext import commands
 
 from Modules.Database import Database
-from Modules.Logger import Logger
+from Modules.old.Logger import Logger
 
 # Get the directory of the current script
 current_dir = os.path.dirname(os.path.abspath(__file__))

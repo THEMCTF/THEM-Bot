@@ -1,7 +1,7 @@
 import disnake
 from disnake.ext import commands
 
-from Modules.Logger import Logger
+from Modules.old.Logger import Logger
 
 
 class OutsideCog(commands.Cog):
