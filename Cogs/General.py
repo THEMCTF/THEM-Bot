@@ -13,6 +13,7 @@ class GeneralCog(commands.Cog):
         self.bot = bot
         self.config = config
         self.admin_user_ids = config.get("admin_user_ids", [])
+        self.shutdown_emoji = config.get("shutdown_emoji", "🔴")
 
     async def cog_load(self):
         """A special method that is called when the cog is loaded."""
@@ -85,7 +86,9 @@ class GeneralCog(commands.Cog):
     @Logger
     async def shutdown_command(self, inter: disnake.ApplicationCommandInteraction):
         """Gracefully shutdown the bot via Discord command"""
-        await inter.response.send_message("🔴 Shutting down bot...", ephemeral=True)
+        await inter.response.send_message(
+            f"{self.shutdown_emoji} Shutting down bot...", ephemeral=True
+        )
         print(f"Shutdown initiated by {inter.author} ({inter.author.id})")
 
         # Give time for the message to send

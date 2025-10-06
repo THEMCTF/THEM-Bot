@@ -212,8 +212,6 @@ class ModerationCog(commands.Cog):
                                 f"Tenor API request failed with status {r.status}: {await r.text()}"
                             )
 
-            torture_message = await inter.followup.send("Torturing...")
-
             if gif_url:
                 await inter.channel.send(gif_url)
                 await asyncio.sleep(10)
