@@ -9,6 +9,7 @@ class TicketCog(commands.Cog):
         self.bot = bot
         self.db = db
         self.config = config
+        self.solution_emoji = config.get("solution_emoji", "✅")
 
     async def _add_solution_(self, channel_id, message, marked_by):
         if "solutions" not in await self.db.list_tables():
@@ -72,7 +73,7 @@ class TicketCog(commands.Cog):
             # Create a cleaner message reference
             jump_url = message.jump_url
             await inter.response.send_message(
-                f"✅ Marked [this message]({jump_url}) as solution",
+                f"{self.solution_emoji} Marked [this message]({jump_url}) as solution",
                 ephemeral=True,
             )
 
@@ -123,6 +124,8 @@ class TicketCog(commands.Cog):
             await inter.response.send_message(
                 f"Failed to get solutions: {str(e)}", ephemeral=True
             )
+
+    # TODO: Make our own ticket system
 
 
 def setup(bot):
