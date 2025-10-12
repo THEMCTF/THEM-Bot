@@ -9,6 +9,7 @@ from disnake.ext import commands
 from dotenv import load_dotenv
 
 from Modules.Database import Database
+from Modules.Logger import Logger
 
 photo = """\033[32m hi\033[0m"""
 
@@ -104,9 +105,6 @@ async def on_ready():
     # Prevent setup from running more than once
     if not bot.is_ready() or bot.is_closed():
         return
-    if hasattr(bot, "_has_been_ready"):
-        return
-    bot._has_been_ready = True
     # Start timing after connection is established
     startup_time = time.time() - bot.launch_time
 
@@ -120,7 +118,6 @@ async def on_ready():
         # Connect to database
         await bot.db.connect()
         db_status = "✅" if bot.db.pool else "❌"
-        print(f"Database connection: {db_status}")
 
         # Ensure data directory exists
         data_dir = os.path.join(os.path.dirname(__file__), "data")
