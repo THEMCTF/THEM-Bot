@@ -7,7 +7,7 @@ import humanize
 import yaml
 from disnake.ext import commands
 
-from Modules.Logger import Logger
+from Modules.Logger import logger
 
 
 class GeneralCog(commands.Cog):
@@ -18,7 +18,9 @@ class GeneralCog(commands.Cog):
         self.launch_time = launch_time
         self.admin_user_ids = config.get("admin_user_ids", [])
         self.shutdown_emoji = config.get("shutdown_emoji", "🔴")
-        self.logger = Logger(bot, config)
+        
+        # Configure the logger
+        logger.configure(bot, config)
 
     async def cog_load(self):
         """A special method that is called when the cog is loaded."""
@@ -35,7 +37,7 @@ class GeneralCog(commands.Cog):
         name="ping",
         description="Check bot latency and uptime.",
     )
-    @self.logger
+    @logger
     async def ping(self, inter: disnake.ApplicationCommandInteraction):
         # measure API latency by deferring response so we see the time taken
         start_time = time.perf_counter()
@@ -66,14 +68,14 @@ class GeneralCog(commands.Cog):
         await inter.followup.send(components=container)
 
     @commands.slash_command(name="gif", description="gif.")
-    @self.logger(message="hi")
+    @logger(message="hi")
     async def gif(self, inter: disnake.ApplicationCommandInteraction):
         await inter.response.send_message(
             "https://tenor.com/view/them-ctf-scream-scream-if-you-love-them-the-rock-gif-5196550339096611233"
         )
 
     @commands.slash_command(name="source", description="Sends HER?! source code")
-    @self.logger
+    @logger
     async def source(self, inter: disnake.ApplicationCommandInteraction):
         await inter.response.send_message("https://github.com/THEMCTF/THEM-Bot")
 
@@ -86,7 +88,7 @@ class GeneralCog(commands.Cog):
     @commands.slash_command(
         name="themcount", description="Shows how many times THEM?! has been mentioned"
     )
-    @self.logger
+    @logger
     async def them_count(self, inter: disnake.ApplicationCommandInteraction):
         times_rows = await self.db.find_rows("random", "them_count")
         times_summoned = await self.db.read_table(
@@ -97,7 +99,7 @@ class GeneralCog(commands.Cog):
         )
 
     @commands.slash_command(name="help", description="List all slash commands.")
-    @self.logger
+    @logger
     async def help_slash(self, inter: disnake.ApplicationCommandInteraction):
         """Shows all available commands"""
         help_text = "```\nAvailable Commands:\n"
@@ -134,7 +136,7 @@ class GeneralCog(commands.Cog):
     @commands.check(
         lambda inter: inter.author.id in inter.bot.get_cog("GeneralCog").admin_user_ids
     )
-    @self.logger
+    @logger
     async def shutdown_command(self, inter: disnake.ApplicationCommandInteraction):
         """Gracefully shutdown the bot via Discord command"""
         await inter.response.send_message(
