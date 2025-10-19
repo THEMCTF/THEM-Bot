@@ -10,7 +10,7 @@ from disnake.ext import commands
 from dotenv import load_dotenv
 
 from Modules.Database import Database
-from Modules.Logger import Logger
+from Modules.Logger import logger
 
 # ==================== Setup ====================
 
@@ -31,6 +31,15 @@ with open(config_path, "r") as f:
 
 class HER(commands.InteractionBot):
     def __init__(self, *args, **kwargs):
+        # Set test_guilds for instant command sync in development
+        if config.get("development_mode", False):
+            testing_guild = config.get("testing_guild_id")
+            if testing_guild:
+                kwargs["test_guilds"] = [testing_guild]
+                print(
+                    f"\033[33m⚠  Development mode: Commands will sync instantly to guild {testing_guild}\033[0m"
+                )
+
         super().__init__(*args, **kwargs)
         self.launch_time = time.time()
         self.db = Database()
@@ -67,6 +76,53 @@ class HER(commands.InteractionBot):
 
 
 bot = HER(intents=disnake.Intents.all())
+
+
+# Admin-only debug command for checking command status
+@bot.slash_command(
+    name="debugcmds",
+    description="[ADMIN] Show command registration info",
+)
+async def debug_commands(inter: disnake.ApplicationCommandInteraction):
+    """Show detailed info about registered commands"""
+    # Check if user is admin
+    admin_ids = config.get("admin_user_ids", [])
+    if inter.author.id not in admin_ids:
+        await inter.response.send_message(
+            "You don't have permission to use this command.", ephemeral=True
+        )
+        return
+
+    await inter.response.defer(ephemeral=True)
+
+    # Get info about registered commands
+    guild_commands = []
+    global_commands = []
+
+    for cmd in bot.application_commands:
+        if hasattr(cmd, "guild_ids") and cmd.guild_ids:
+            guild_commands.append(f"{cmd.name} (guilds: {cmd.guild_ids})")
+        else:
+            global_commands.append(cmd.name)
+
+    msg = f"**Command Registration Info**\n\n"
+    msg += f"**Total commands:** {len(bot.application_commands)}\n"
+    msg += f"**Global commands:** {len(global_commands)}\n"
+    msg += f"**Guild-specific:** {len(guild_commands)}\n"
+    msg += f"**Dev mode:** {config.get('development_mode', False)}\n\n"
+
+    if global_commands:
+        msg += "**Global commands:**\n" + "\n".join(
+            f"- {c}" for c in global_commands[:15]
+        )
+
+    if guild_commands:
+        msg += "\n\n**Guild commands:**\n" + "\n".join(
+            f"- {c}" for c in guild_commands[:10]
+        )
+
+    await inter.followup.send(msg, ephemeral=True)
+
 
 # ==================== Event Handlers ====================
 
@@ -107,12 +163,31 @@ async def on_ready():
     # Check database status now that it's connected
     db_status = "✅" if bot.db.pool else "❌"
 
+    # Show command sync status
+    print("\n" + "=" * 50)
+    print("Command Sync Status:")
+    print(f"Bot is in {len(bot.guilds)} guild(s):")
+    for guild in bot.guilds:
+        print(f"  - {guild.name} (ID: {guild.id})")
+
+    print(f"\nTotal commands registered: {len(bot.application_commands)}")
+
+    if config.get("development_mode", False):
+        test_guild = config.get("testing_guild_id")
+        print(f"✓ Development mode: Commands auto-sync to test guild {test_guild}")
+        print("  → Commands appear INSTANTLY in test guilds")
+    else:
+        print("✓ Production mode: Commands are global")
+        print("  → May take up to 1 hour to sync globally")
+    print("=" * 50 + "\n")
+
     # Log startup info
     status_parts = [
         f"Connected as: {bot.user}",
         f"Startup time: {startup_time:.2f}s",
         f"Database: {db_status}",
         f"Active cogs: {len(bot.cogs)}",
+        f"Commands registered: {len(bot.application_commands)}",
     ]
     status = "\n".join(status_parts)
     print(f"\033[32m=== Bot Ready ===\n{status}\n===============\033[0m\n")

@@ -1,9 +1,13 @@
 # Bot configuration file
-guild_id: 1382763556642099240
-announcements: 1382763557640470615
+guild_id: 1382763556642099240  # Main server
+testing_guild_id: 1389168478594007070  # Testing server
 list_startup: false
 read_dms_on_start: true
 banned_gif_term: "banned"
+
+# Development mode - if true, commands sync instantly to testing server
+# if false, commands are global (takes up to 1 hour to sync)
+development_mode: true
 
 # Channels
 restricted_channels:
