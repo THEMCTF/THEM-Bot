@@ -104,9 +104,9 @@ class ModerationCog(commands.Cog):
         name="purge",
         default_member_permissions=disnake.Permissions(manage_messages=True),
     )
-    @logger
     @commands.cooldown(1, 10, commands.BucketType.channel)
     @commands.guild_only()
+    @logger
     async def purge_from_message(
         self,
         inter: disnake.ApplicationCommandInteraction,
@@ -125,9 +125,9 @@ class ModerationCog(commands.Cog):
         description="Time a user out",
         default_member_permissions=disnake.Permissions(moderate_members=True),
     )
-    @logger
     @commands.cooldown(1, 5, commands.BucketType.user)
     @commands.guild_only()
+    @logger
     async def timeout(
         self,
         inter: disnake.ApplicationCommandInteraction,
@@ -168,9 +168,9 @@ class ModerationCog(commands.Cog):
         description="Ban a user",
         default_member_permissions=disnake.Permissions(ban_members=True),
     )
-    @logger
     @commands.cooldown(1, 5, commands.BucketType.user)
     @commands.guild_only()
+    @logger
     async def ban(
         self,
         inter: disnake.ApplicationCommandInteraction,
@@ -238,9 +238,9 @@ class ModerationCog(commands.Cog):
         description="Lock the channel",
         default_member_permissions=disnake.Permissions(manage_channels=True),
     )
-    @logger
     @commands.cooldown(1, 5, commands.BucketType.user)
     @commands.guild_only()
+    @logger
     async def lock(
         self,
         inter: disnake.ApplicationCommandInteraction,
@@ -314,9 +314,9 @@ class ModerationCog(commands.Cog):
         description="Unlock the channel",
         default_member_permissions=disnake.Permissions(manage_channels=True),
     )
-    @logger
     @commands.cooldown(1, 5, commands.BucketType.user)
     @commands.guild_only()
+    @logger
     async def unlock(
         self,
         inter: disnake.ApplicationCommandInteraction,
@@ -371,8 +371,8 @@ class ModerationCog(commands.Cog):
         description="Change the amount of logging",
         default_member_permissions=disnake.Permissions(manage_messages=True),
     )
-    @logger
     @commands.guild_only()
+    @logger
     async def logging(
         self,
         inter: disnake.ApplicationCommandInteraction,

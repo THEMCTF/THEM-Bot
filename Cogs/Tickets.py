@@ -1,7 +1,7 @@
 import disnake
 from disnake.ext import commands
 
-from Modules.Logger import Logger
+from Modules.Logger import logger
 
 
 class TicketCog(commands.Cog):
@@ -9,8 +9,10 @@ class TicketCog(commands.Cog):
         self.bot = bot
         self.db = db
         self.config = config
-        self.logger = Logger(bot, config)
         self.solution_emoji = config.get("solution_emoji", "✅")
+        
+        # Configure the logger
+        logger.configure(bot, config)
 
     async def _add_solution_(self, channel_id, message, marked_by):
         if "solutions" not in await self.db.list_tables():
@@ -53,7 +55,7 @@ class TicketCog(commands.Cog):
         name="Solution",
         default_member_permissions=disnake.Permissions(manage_messages=True),
     )
-    @self.logger
+    @logger
     async def mark_solution(
         self,
         inter: disnake.ApplicationCommandInteraction,
@@ -90,7 +92,7 @@ class TicketCog(commands.Cog):
         description="Get the solutions in this channel",
         default_member_permissions=disnake.Permissions(manage_messages=True),
     )
-    @self.logger
+    @logger
     async def get_solutions(self, inter: disnake.ApplicationCommandInteraction):
         # Check if channel is in the correct category
         if inter.channel.category_id != self.config.get("ticket_category_id"):
