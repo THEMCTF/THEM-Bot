@@ -100,7 +100,7 @@ class Database:
         table_name: str,
         column_name: str,
         value: Any,
-    ) -> List[int]:
+    ) -> List[asyncpg.Record]:
         """
         Find all row IDs where a column matches a specific value.
 
@@ -110,10 +110,10 @@ class Database:
             value: Value to search for
 
         Returns:
-            List of row IDs that match the criteria
+            List of matching row records (dictionaries).
 
         Example:
-            row_ids = await db.find_rows("solutions", "user_id", 123456789)
+            rows = await db.find_rows("solutions", "channel_id", 123456789)
         """
         if self.pool is None:
             raise RuntimeError("Database not connected. Call connect() first.")
@@ -124,10 +124,10 @@ class Database:
                 return []
 
             query = (
-                f'SELECT id FROM "{table_name}" WHERE "{column_name}" = $1 ORDER BY id'
+                f'SELECT * FROM "{table_name}" WHERE "{column_name}" = $1 ORDER BY id'
             )
             rows = await conn.fetch(query, value)
-            return [row["id"] for row in rows]
+            return rows
 
     async def delete_rows(
         self,

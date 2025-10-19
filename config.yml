@@ -24,7 +24,6 @@ archive_category_id: 1385002767382347776
 # Logging configuration
 logging_channel: 1382763558000918577
 enable_channel_logging: true
-rendition: 0
 
 # CTF stuff
 ctf_player_roles:

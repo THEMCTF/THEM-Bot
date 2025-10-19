@@ -9,6 +9,7 @@ class TicketCog(commands.Cog):
         self.bot = bot
         self.db = db
         self.config = config
+        self.logger = Logger(bot, config)
         self.solution_emoji = config.get("solution_emoji", "✅")
 
     async def _add_solution_(self, channel_id, message, marked_by):
@@ -45,16 +46,18 @@ class TicketCog(commands.Cog):
             value=channel_id,
         )
         # just return the message ids
-        return [row["message_id"] for row in solutions]
+        return [row for row in solutions]
 
     # TODO: make it select which challenge it's for
     @commands.message_command(
         name="Solution",
         default_member_permissions=disnake.Permissions(manage_messages=True),
     )
-    @Logger
+    @self.logger
     async def mark_solution(
-        self, inter: disnake.ApplicationCommandInteraction, message: disnake.Message
+        self,
+        inter: disnake.ApplicationCommandInteraction,
+        message: disnake.Message,
     ):
         # Check if channel is in the correct category
         if inter.channel.category_id != self.config.get("ticket_category_id"):
@@ -87,7 +90,7 @@ class TicketCog(commands.Cog):
         description="Get the solutions in this channel",
         default_member_permissions=disnake.Permissions(manage_messages=True),
     )
-    @Logger
+    @self.logger
     async def get_solutions(self, inter: disnake.ApplicationCommandInteraction):
         # Check if channel is in the correct category
         if inter.channel.category_id != self.config.get("ticket_category_id"):

@@ -11,7 +11,7 @@ from disnake.ext import commands, tasks
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-from Modules.CooldownManager import dynamic_cooldown
+# from Modules.CooldownManager import dynamic_cooldown
 from Modules.Database import Database
 from Modules.old.Logger import Logger
 
@@ -761,7 +761,7 @@ class CTFSheet(commands.Cog):
 
     @staticmethod
     @commands.Cog.listener("on_button_click")
-    @dynamic_cooldown()
+    # @dynamic_cooldown()
     async def handle_get_role_button(self, inter: disnake.MessageInteraction):
         """Handle the 'Get Role' button click."""
         custom_id = inter.component.custom_id

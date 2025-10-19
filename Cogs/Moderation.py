@@ -9,7 +9,8 @@ import disnake
 import dotenv
 from disnake.ext import commands
 
-from Modules.Logger import Logger
+import Modules.Website as Website
+from Modules.Logger import logger
 
 # use dotenv to get the api key for tenor
 dotenv.load_dotenv()
@@ -22,12 +23,17 @@ class ModerationCog(commands.Cog):
         self.db = db
         self.config = config
 
+        # Configure the logger
+        logger.configure(bot, config)
+
         # Load constants from config
         self.colors = self.config.get("colors", {})
         self.LOCKED_EMOJI = self.config.get("locked_emoji", "🔒")
         self.UNLOCKED_EMOJI = self.config.get("unlocked_emoji", "🔓")
         self.COLOR_RED = self.colors.get("red", 0xDD2E44)
         self.MODERATOR_ROLE_IDS = set(self.config.get("moderator_roles", []))
+        self.banned_term = self.config.get("banned_gif_term", "banned")
+        self.admin_user_ids = config.get("admin_user_ids", [])
 
         self._last_purge_timestamp: float = 0
 
@@ -59,9 +65,8 @@ class ModerationCog(commands.Cog):
         description="Mass delete messages",
         default_member_permissions=disnake.Permissions(manage_messages=True),
     )
-    @Logger
-    @commands.cooldown(1, 5, commands.BucketType.channel)
     @commands.guild_only()
+    @logger
     async def purge(
         self,
         inter: disnake.ApplicationCommandInteraction,
@@ -99,7 +104,7 @@ class ModerationCog(commands.Cog):
         name="purge",
         default_member_permissions=disnake.Permissions(manage_messages=True),
     )
-    @Logger
+    @logger
     @commands.cooldown(1, 10, commands.BucketType.channel)
     @commands.guild_only()
     async def purge_from_message(
@@ -120,7 +125,7 @@ class ModerationCog(commands.Cog):
         description="Time a user out",
         default_member_permissions=disnake.Permissions(moderate_members=True),
     )
-    @Logger
+    @logger
     @commands.cooldown(1, 5, commands.BucketType.user)
     @commands.guild_only()
     async def timeout(
@@ -163,7 +168,7 @@ class ModerationCog(commands.Cog):
         description="Ban a user",
         default_member_permissions=disnake.Permissions(ban_members=True),
     )
-    @Logger
+    @logger
     @commands.cooldown(1, 5, commands.BucketType.user)
     @commands.guild_only()
     async def ban(
@@ -187,15 +192,14 @@ class ModerationCog(commands.Cog):
 
         try:
             await inter.response.defer(ephemeral=True)
-            banned_gif_term = self.config.get("banned_gif_term")
 
             gif_url = None
-            if banned_gif_term and TENOR_API_KEY:
+            if self.banned_term and TENOR_API_KEY:
                 async with aiohttp.ClientSession() as session:
                     async with session.get(
                         "https://tenor.googleapis.com/v2/search",
                         params={
-                            "q": banned_gif_term,
+                            "q": self.banned_term,
                             "key": TENOR_API_KEY,
                             "limit": 50,
                             "media_filter": "gif",
@@ -204,9 +208,9 @@ class ModerationCog(commands.Cog):
                         if r.status == 200:
                             data = await r.json()
                             if data.get("results"):
-                                gif_url = random.choice(data["results"])[
-                                    "media_formats"
-                                ]["gif"]["url"]
+                                gif_url = random.choice(
+                                    data["results"]["media_formats"]["gif"]["url"]
+                                )
                         else:
                             print(
                                 f"Tenor API request failed with status {r.status}: {await r.text()}"
@@ -234,7 +238,7 @@ class ModerationCog(commands.Cog):
         description="Lock the channel",
         default_member_permissions=disnake.Permissions(manage_channels=True),
     )
-    @Logger
+    @logger
     @commands.cooldown(1, 5, commands.BucketType.user)
     @commands.guild_only()
     async def lock(
@@ -299,7 +303,7 @@ class ModerationCog(commands.Cog):
             color=self.COLOR_RED,
         )
         embed.set_author(
-            name=str(inter.author),  # starry does string safety for the first time /s
+            name=str(inter.author),
             icon_url=str(inter.author.avatar.url),
         )
 
@@ -310,7 +314,7 @@ class ModerationCog(commands.Cog):
         description="Unlock the channel",
         default_member_permissions=disnake.Permissions(manage_channels=True),
     )
-    @Logger
+    @logger
     @commands.cooldown(1, 5, commands.BucketType.user)
     @commands.guild_only()
     async def unlock(
@@ -337,7 +341,6 @@ class ModerationCog(commands.Cog):
 
         # Deserialize overwrites from JSON
         serializable_overwrites = json.loads(overwrites_json)
-
         original_overwrites = {
             inter.guild.get_role(int(target_id))
             or inter.guild.get_member(
@@ -357,11 +360,46 @@ class ModerationCog(commands.Cog):
 
         embed = disnake.Embed(
             title=f"{self.UNLOCKED_EMOJI} Channel Unlocked",
-            description=f"Locking reason: {disnake.utils.escape_markdown(original_reason)}",  # lol I found a new function
+            description=f"Locking reason: {disnake.utils.escape_markdown(original_reason)}",
             color=self.colors.get("green", 0x78B159),
         )
         embed.set_author(name=str(inter.author), icon_url=str(inter.author.avatar.url))
         await inter.followup.send(embed=embed)
+
+    @commands.slash_command(
+        name="logging",
+        description="Change the amount of logging",
+        default_member_permissions=disnake.Permissions(manage_messages=True),
+    )
+    @logger
+    @commands.guild_only()
+    async def logging(
+        self,
+        inter: disnake.ApplicationCommandInteraction,
+        level: int = commands.Param(
+            description="Logging level (0-5, 0 for all logging)",
+            min_value=0,
+            max_value=5,
+        ),
+    ):
+        logger.logging_level = level
+        await inter.response.send_message(
+            f"Logging level set to {level}", ephemeral=True
+        )
+
+    @commands.slash_command(name="code", description="get code")
+    @commands.guild_only()
+    async def code(self, inter: disnake.ApplicationCommandInteraction):
+        if inter.author.id not in self.admin_user_ids:
+            await inter.response.send_message(
+                "You do not have permission to use this command.", ephemeral=True
+            )
+            return
+        else:
+            otp = await Website.get_otp_code()
+            await inter.response.send_message(
+                f"Your one-time code is: {otp}", ephemeral=True
+            )
 
 
 def setup(bot):
