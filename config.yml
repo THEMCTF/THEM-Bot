@@ -1,39 +1,37 @@
-# Bot configuration file
-guild_id: 1382763556642099240  # Main server
-testing_guild_id: 1389168478594007070  # Testing server
+# Bot Configuration
+guild_id: 1382763556642099240
+testing_guild_id: 1389168478594007070
+development_mode: false
+
 list_startup: false
 read_dms_on_start: true
 banned_gif_term: "banned"
 
-# Development mode - if true, commands sync instantly to testing server
-# if false, commands are global (takes up to 1 hour to sync)
-development_mode: true
-
 # Channels
 restricted_channels:
-  - 1382763557640470615  # announcements
-  - 1389155950002311219  # tip of the day
-  - 1399381088920670281  # ctf diary
-  - 1392137727759089817  # hall of fame
-  - 1382763557816500225  # welcome
-  - 1382765163484155904  # rules
-  - 1389327426538049677  # chal tryouts
-  - 1385022337715277955  # apply for member
-  - 1385340123406930081  # transcripts
-  - 1382763558000918577  # mod logs
+  - 1382763557640470615
+  - 1389155950002311219
+  - 1399381088920670281
+  - 1392137727759089817
+  - 1382763557816500225
+  - 1382765163484155904
+  - 1389327426538049677
+  - 1385022337715277955
+  - 1385340123406930081
+  - 1382763558000918577
+
 ticket_category_id: 1385339846117294110
 member_category_id: 1422562737208168508
 archive_category_id: 1385002767382347776
-
-# Logging configuration
-logging_channel: 1382763558000918577
+logging_channel: 1422839789488705597
 enable_channel_logging: true
 
-# CTF stuff
+# CTF
 ctf_player_roles:
   - 1382763556642099243
   - 1394040752937369640
 
+# Permissions
 admin_user_ids:
   - 733839959009525761
   - 860215950866645023
@@ -47,9 +45,10 @@ moderator_roles:
 purged_emoji: "<:purge:1422343889100083200><:purgy:1422343933220093952>"
 locked_emoji: "🔒"
 unlocked_emoji: "🔓"
+shutdown_emoji: "🔴"
+solution_emoji: "✅"
 
-
-# Embed colors
+# Colors
 colors:
   red: 0xDD2E44
   green: 0x78B159
@@ -60,19 +59,19 @@ colors:
   pink: 0xFF6F91
   gray: 0xAAAAAA
 
-# Rate limiting (in seconds)
+# Rate limiting (seconds)
 cooldowns:
-  default: 60  # Default cooldown if not specified
+  default: 60
   General:
     help: 30
     ping: 10
   Moderation:
     warn: 5
-    kick: 0  # No cooldown for moderation commands
+    kick: 0
     ban: 0
   CTFtime:
-    default: 120  # Default for all CTFtime commands
-    upcoming: 300  # Specific override for upcoming command
+    default: 120
+    upcoming: 300
   CTFother:
     default: 30
   Responder:

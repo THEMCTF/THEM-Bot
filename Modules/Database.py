@@ -37,7 +37,10 @@ class Database:
             self.pool = None
 
     async def create_table(
-        self, table_name: str, columns: List[tuple], if_not_exists: bool = True
+        self,
+        table_name: str,
+        columns: List[tuple],
+        if_not_exists: bool = True
     ):
         """
         Create a new table with specified columns.
@@ -91,7 +94,7 @@ class Database:
 
         async with self.pool.acquire() as conn:
             if_exists_clause = "IF EXISTS" if if_exists else ""
-            query = f'DROP TABLE {if_exists_clause} "{table_name}";'
+            query = f'DROP TABLE {if_exists_clause} "{table_name}"'
             await conn.execute(query)
             print(f"✓ Table '{table_name}' dropped successfully")
 
@@ -280,7 +283,9 @@ class Database:
         return result
 
     async def _get_column_names(
-        self, conn: asyncpg.Connection, table_name: str
+        self,
+        conn: asyncpg.Connection,
+        table_name: str
     ) -> List[str]:
         """Fetch column names for a table, excluding 'id'."""
         columns = await conn.fetch(
@@ -304,7 +309,10 @@ class Database:
         return result
 
     async def _ensure_row_exists(
-        self, conn: asyncpg.Connection, table_name: str, row_id: int
+        self,
+        conn: asyncpg.Connection,
+        table_name: str,
+        row_id: int
     ):
         """Check if a row exists, create it if it doesn't."""
         result = await conn.fetchval(
@@ -445,10 +453,10 @@ class Database:
     async def read_table(
         self,
         table_name: str,
-        start_row: int,
-        start_col: int,
-        num_rows: int = 1,
-        num_cols: int = 1,
+        start_row: int = None,
+        start_col: int = None,
+        num_rows: int = None,
+        num_cols: int = None,
     ) -> Union[Any, List[Any], List[List[Any]]]:
         """
         Read data from a table starting at specific coordinates.
@@ -477,6 +485,11 @@ class Database:
             if not await self._table_exists(conn, table_name):
                 await self.create_table(table_name)
                 print(f"Table '{table_name}' did not exist and was created.")
+
+            if start_row is None and start_col is None and num_rows is None and num_cols is None:
+                query = f'SELECT * FROM "{table_name}" ORDER BY id'
+                rows = await conn.fetch(query)
+                return rows
 
             column_names = await self._get_column_names(conn, table_name)
 

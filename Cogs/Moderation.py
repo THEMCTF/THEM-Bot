@@ -9,8 +9,8 @@ import disnake
 import dotenv
 from disnake.ext import commands
 
-import Modules.Website as Website
 from Modules.Logger import logger
+from Modules.Website import get_otp_code
 
 # use dotenv to get the api key for tenor
 dotenv.load_dotenv()
@@ -208,9 +208,9 @@ class ModerationCog(commands.Cog):
                         if r.status == 200:
                             data = await r.json()
                             if data.get("results"):
-                                gif_url = random.choice(
-                                    data["results"]["media_formats"]["gif"]["url"]
-                                )
+                                gif_url = random.choice(data["results"])[
+                                    "media_formats"
+                                ]["gif"]["url"]
                         else:
                             print(
                                 f"Tenor API request failed with status {r.status}: {await r.text()}"
@@ -322,6 +322,16 @@ class ModerationCog(commands.Cog):
         inter: disnake.ApplicationCommandInteraction,
     ):
         await inter.response.defer()
+
+        # Double check if channel is already unlocked
+        print(inter.channel.overwrites_for(inter.guild.default_role).send_messages)
+        if (
+            inter.channel.overwrites_for(inter.guild.default_role).send_messages
+            is not False
+        ):
+            await inter.followup.send("This channel is not locked.", ephemeral=True)
+            return
+
         # Find the lock data in the database
         lock_rows = await self.db.find_rows(
             "locked_channels", "channel_id", inter.channel.id
@@ -335,7 +345,11 @@ class ModerationCog(commands.Cog):
             return
 
         lock_data = await self.db.read_table(
-            "locked_channels", start_row=lock_rows[0], start_col=1, num_cols=3
+            "locked_channels",
+            start_row=lock_rows[0]["id"],
+            start_col=1,
+            num_rows=1,
+            num_cols=3,
         )
         _, overwrites_json, original_reason = lock_data
 
@@ -356,7 +370,7 @@ class ModerationCog(commands.Cog):
             reason=f"Unlock command by {inter.author}",
         )
 
-        await self.db.delete_rows("locked_channels", lock_rows)
+        await self.db.delete_rows("locked_channels", lock_rows[0]["id"])
 
         embed = disnake.Embed(
             title=f"{self.UNLOCKED_EMOJI} Channel Unlocked",
@@ -389,6 +403,7 @@ class ModerationCog(commands.Cog):
 
     @commands.slash_command(name="code", description="get code")
     @commands.guild_only()
+    @logger
     async def code(self, inter: disnake.ApplicationCommandInteraction):
         if inter.author.id not in self.admin_user_ids:
             await inter.response.send_message(
@@ -396,7 +411,7 @@ class ModerationCog(commands.Cog):
             )
             return
         else:
-            otp = await Website.get_otp_code()
+            otp = await get_otp_code()
             await inter.response.send_message(
                 f"Your one-time code is: {otp}", ephemeral=True
             )

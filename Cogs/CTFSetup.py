@@ -20,7 +20,7 @@ class ActiveCTF(commands.Cog):
         self.db = db
         self.config = config
         self.admin_user_ids = config.get("admin_user_ids", [])
-        
+
         # Configure the logger
         logger.configure(bot, config)
 
@@ -29,7 +29,7 @@ class ActiveCTF(commands.Cog):
     ):
         """Autocomplete for challenge names."""
         challenges = await self.db.read_table("challenges")
-        return [chal for chal in challenges if user_input.lower() in chal.lower()]
+        return [chal["name"] for chal in challenges if user_input.lower() in chal["name"].lower()]
 
     @commands.slash_command(
         name="submitflag", description="Submit a flag for the current CTF"

@@ -11,6 +11,7 @@ from Modules.Logger import logger
 
 
 class GeneralCog(commands.Cog):
+
     def __init__(self, bot, db, config, launch_time):
         self.bot = bot
         self.db = db
@@ -18,7 +19,7 @@ class GeneralCog(commands.Cog):
         self.launch_time = launch_time
         self.admin_user_ids = config.get("admin_user_ids", [])
         self.shutdown_emoji = config.get("shutdown_emoji", "🔴")
-        
+
         # Configure the logger
         logger.configure(bot, config)
 
@@ -68,38 +69,38 @@ class GeneralCog(commands.Cog):
         await inter.followup.send(components=container)
 
     @commands.slash_command(name="gif", description="gif.")
-    @logger(message="hi")
+    # @logger(message="hi")
     async def gif(self, inter: disnake.ApplicationCommandInteraction):
         await inter.response.send_message(
             "https://tenor.com/view/them-ctf-scream-scream-if-you-love-them-the-rock-gif-5196550339096611233"
         )
 
     @commands.slash_command(name="source", description="Sends HER?! source code")
-    @logger
+    # @logger
     async def source(self, inter: disnake.ApplicationCommandInteraction):
         await inter.response.send_message("https://github.com/THEMCTF/THEM-Bot")
 
     @commands.slash_command(
-        name="sob", description="a", guild_ids=[1389168478594007070]
-    )
-    async def sob(self, inter: disnake.ApplicationCommandInteraction):
-        await inter.response.send("sob")
-
-    @commands.slash_command(
         name="themcount", description="Shows how many times THEM?! has been mentioned"
     )
-    @logger
+    # @logger
     async def them_count(self, inter: disnake.ApplicationCommandInteraction):
-        times_rows = await self.db.find_rows("random", "them_count")
-        times_summoned = await self.db.read_table(
-            "random", start_row=times_rows, start_col=1
-        )
-        await inter.response.send_message(
-            f"THEM has been summoned **{times_summoned}** times!", ephemeral=False
-        )
+        times_rows = await self.db.find_rows("random", "key", "them_count")
+        if times_rows:
+            times_summoned = await self.db.read_table(
+                "random", start_row=times_rows[0]["id"], start_col=1
+            )
+            await inter.response.send_message(
+                f"THEM has been summoned **{times_summoned}** times!", ephemeral=False
+            )
+        else:
+            await inter.response.send_message(
+                "Could not find the number of times THEM has been summoned.",
+                ephemeral=True,
+            )
 
     @commands.slash_command(name="help", description="List all slash commands.")
-    @logger
+    # @logger
     async def help_slash(self, inter: disnake.ApplicationCommandInteraction):
         """Shows all available commands"""
         help_text = "```\nAvailable Commands:\n"
@@ -136,7 +137,7 @@ class GeneralCog(commands.Cog):
     @commands.check(
         lambda inter: inter.author.id in inter.bot.get_cog("GeneralCog").admin_user_ids
     )
-    @logger
+    # @logger
     async def shutdown_command(self, inter: disnake.ApplicationCommandInteraction):
         """Gracefully shutdown the bot via Discord command"""
         await inter.response.send_message(
