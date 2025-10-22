@@ -37,10 +37,7 @@ class Database:
             self.pool = None
 
     async def create_table(
-        self,
-        table_name: str,
-        columns: List[tuple],
-        if_not_exists: bool = True
+        self, table_name: str, columns: List[tuple], if_not_exists: bool = True
     ):
         """
         Create a new table with specified columns.
@@ -283,9 +280,7 @@ class Database:
         return result
 
     async def _get_column_names(
-        self,
-        conn: asyncpg.Connection,
-        table_name: str
+        self, conn: asyncpg.Connection, table_name: str
     ) -> List[str]:
         """Fetch column names for a table, excluding 'id'."""
         columns = await conn.fetch(
@@ -309,10 +304,7 @@ class Database:
         return result
 
     async def _ensure_row_exists(
-        self,
-        conn: asyncpg.Connection,
-        table_name: str,
-        row_id: int
+        self, conn: asyncpg.Connection, table_name: str, row_id: int
     ):
         """Check if a row exists, create it if it doesn't."""
         result = await conn.fetchval(
@@ -486,7 +478,12 @@ class Database:
                 await self.create_table(table_name)
                 print(f"Table '{table_name}' did not exist and was created.")
 
-            if start_row is None and start_col is None and num_rows is None and num_cols is None:
+            if (
+                start_row is None
+                and start_col is None
+                and num_rows is None
+                and num_cols is None
+            ):
                 query = f'SELECT * FROM "{table_name}" ORDER BY id'
                 rows = await conn.fetch(query)
                 return rows
