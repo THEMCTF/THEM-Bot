@@ -13,6 +13,8 @@ from googleapiclient.errors import HttpError
 
 from Modules.Logger import logger
 
+# TODO: auto make event in discord
+
 
 class ActiveCTF(commands.Cog):
     def __init__(self, bot, db, config):
@@ -22,14 +24,18 @@ class ActiveCTF(commands.Cog):
         self.admin_user_ids = config.get("admin_user_ids", [])
 
         # Configure the logger
-        logger.configure(bot, config)
+        # logger.configure(bot, config)
 
     async def chalname_autocompleter(
         self, inter: disnake.ApplicationCommandInteraction, user_input: str
     ):
         """Autocomplete for challenge names."""
         challenges = await self.db.read_table("challenges")
-        return [chal["name"] for chal in challenges if user_input.lower() in chal["name"].lower()]
+        return [
+            chal["name"]
+            for chal in challenges
+            if user_input.lower() in chal["name"].lower()
+        ]
 
     @commands.slash_command(
         name="submitflag", description="Submit a flag for the current CTF"
