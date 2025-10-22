@@ -83,7 +83,14 @@ class Logger:
             @functools.wraps(f)
             def sync_wrapper(*args, **kwargs):
                 start_time = time.perf_counter()
-                class_name = args[0].__class__.__name__ if args else "Unknown"
+                if args:
+                    class_name = args[0].__class__.__name__
+                elif "self" in kwargs:
+                    class_name = kwargs["self"].__class__.__name__
+                else:
+                    class_name = "Unknown"
+
+                print(f"[Logger] Executing {f.__name__} (sync) in {class_name}")
                 print(f"[Logger] Executing {f.__name__} (sync) in {class_name}")
                 print(f"[Logger] Args: {args}")
                 print(f"[Logger] Kwargs: {kwargs}")
@@ -103,7 +110,14 @@ class Logger:
             @functools.wraps(f)
             async def async_wrapper(*args, **kwargs):
                 start_time = time.perf_counter()
-                class_name = args[0].__class__.__name__ if args else "Unknown"
+                # Determine class name for logging
+                if args:
+                    class_name = args[0].__class__.__name__
+                elif "self" in kwargs:
+                    class_name = kwargs["self"].__class__.__name__
+                else:
+                    class_name = "Unknown"
+
                 print(f"[Logger] Executing {f.__name__} (async) in {class_name}")
                 print(f"[Logger] Args: {args}")
                 print(f"[Logger] Kwargs: {kwargs}")
@@ -111,7 +125,7 @@ class Logger:
                 inter = next(
                     (
                         arg
-                        for arg in args
+                        for arg in list(args) + list(kwargs.values())
                         if isinstance(arg, disnake.ApplicationCommandInteraction)
                     ),
                     None,

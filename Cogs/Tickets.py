@@ -10,9 +10,9 @@ class TicketCog(commands.Cog):
         self.db = db
         self.config = config
         self.solution_emoji = config.get("solution_emoji", "✅")
-        
+
         # Configure the logger
-        logger.configure(bot, config)
+        # logger.configure(bot, config)
 
     async def _add_solution_(self, channel_id, message, marked_by):
         if "solutions" not in await self.db.list_tables():

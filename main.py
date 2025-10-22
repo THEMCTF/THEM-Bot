@@ -11,8 +11,8 @@ from dotenv import load_dotenv
 from Modules.Database import Database
 from Modules.Logger import logger
 
-BANNER = "\033[32m hi\033[0m"
-print(BANNER)
+# === Startup banner ===
+print("\033[32mStarting HER bot...\033[0m")
 
 load_dotenv()
 TOKEN = os.getenv("TOKEN")
@@ -24,12 +24,12 @@ with open(config_path, "r") as f:
 
 class HER(commands.InteractionBot):
     def __init__(self, *args, **kwargs):
-        if config.get("development_mode", False):
-            testing_guild = config.get("testing_guild_id")
-            if testing_guild:
-                kwargs["test_guilds"] = [testing_guild]
+        if config.get("development_mode"):
+            guild_id = config.get("testing_guild_id")
+            if guild_id:
+                kwargs["test_guilds"] = [guild_id]
                 print(
-                    f"\033[33m⚠  Dev mode: Commands sync instantly to guild {testing_guild}\033[0m"
+                    f"\033[33m⚠ Dev mode: Instant command sync to guild {guild_id}\033[0m"
                 )
 
         super().__init__(*args, **kwargs)
@@ -39,33 +39,30 @@ class HER(commands.InteractionBot):
 
     def load_all_cogs(self):
         print("\nLoading cogs...")
-        loaded_count = 0
-        total_cogs = 0
         cogs_dir = Path(__file__).parent / "Cogs"
+        cogs = [
+            f"Cogs.{f.stem}"
+            for f in cogs_dir.iterdir()
+            if f.suffix == ".py" and not f.name.startswith("__")
+        ]
 
-        for item in cogs_dir.iterdir():
-            if (
-                item.is_dir()
-                or not item.name.endswith(".py")
-                or item.name.startswith("__")
-            ):
-                continue
-
-            cog_path = f"Cogs.{item.stem}"
-            total_cogs += 1
-
+        success, fail = 0, 0
+        for cog in cogs:
             try:
-                self.load_extension(cog_path)
-                print(f"\033[32m✓ Loaded {cog_path}\033[0m")
-                loaded_count += 1
+                self.load_extension(cog)
+                print(f"\033[32m✓ Loaded {cog}\033[0m")
+                success += 1
             except Exception as e:
-                print(f"\033[31m✗ Failed to load {cog_path}: {e}\033[0m")
+                print(f"\033[31m✗ Failed to load {cog}: {e}\033[0m")
+                fail += 1
 
-        print(f"\033[32m✓ Loaded {loaded_count}/{total_cogs} cogs\033[0m\n")
+        print(
+            f"\033[32m✓ Successfully loaded {success}/{len(cogs)} cogs ({fail} failed)\033[0m\n"
+        )
 
     async def setup_hook(self):
         try:
-            print("Initializing services...\n")
+            print("Initializing services...")
             await self.db.connect()
 
             data_dir = Path(__file__).parent / "data"
@@ -76,7 +73,7 @@ class HER(commands.InteractionBot):
                 log_file.write_text("[]")
 
         except Exception as e:
-            print(f"\033[31m✗ Failed during setup_hook: {e}\033[0m")
+            print(f"\033[31m✗ Setup error: {e}\033[0m")
             await self.close()
 
     async def on_ready(self):
@@ -85,43 +82,34 @@ class HER(commands.InteractionBot):
         db_status = "✅" if self.db.pool else "❌"
 
         print("\n" + "=" * 50)
-        print("Command Sync Status:")
-        print(f"Bot is in {len(self.guilds)} guild(s):")
-        for guild in self.guilds:
-            print(f"  - {guild.name} (ID: {guild.id})")
+        print(f"Connected as: {self.user}")
+        print(f"Guilds: {len(self.guilds)}")
+        print(f"Commands registered: {len(self.application_commands)}")
 
-        print(f"\nTotal commands registered: {len(self.application_commands)}")
-
-        if config.get("development_mode", False):
-            test_guild = config.get("testing_guild_id")
-            print(f"✓ Development mode: Commands auto-sync to test guild {test_guild}")
-            print("  → Commands appear INSTANTLY in test guilds")
+        if config.get("development_mode"):
+            print(
+                f"✓ Development mode (Test guild ID: {config.get('testing_guild_id')})"
+            )
         else:
-            print("✓ Production mode: Commands are global")
-            print("  → May take up to 1 hour to sync globally")
-        print("=" * 50 + "\n")
+            print("✓ Production mode (Global command sync, may take up to 1 hour)")
 
-        status_parts = [
-            f"Connected as: {self.user}",
-            f"Startup time: {startup_time:.2f}s",
-            f"Database: {db_status}",
-            f"Active cogs: {len(self.cogs)}",
-            f"Commands registered: {len(self.application_commands)}",
-        ]
-        status = "\n".join(status_parts)
-        print(f"\033[32m=== Bot Ready ===\n{status}\n===============\033[0m\n")
+        print("=" * 50)
+        print(
+            f"\033[32mStartup time: {startup_time:.2f}s | Database: {db_status}\033[0m\n"
+        )
+        print(f"\033[32m=== HER is ready! ===\033[0m\n")
 
 
-async def shutdown(bot):
-    print("\n\033[33m=== Shutting down bot ===\033[0m")
+async def shutdown(bot: HER):
+    print("\n\033[33mShutting down bot...\033[0m")
     try:
         if bot.db and bot.db.pool:
             await bot.db.close()
-            print("✓ Database connection closed")
+            print("✓ Database closed")
 
         await bot.close()
         print("✓ Bot connection closed")
-        print("\033[32m✓ Shutdown complete\033[0m\n")
+        print("\033[32mShutdown complete\033[0m\n")
     except Exception as e:
         print(f"\033[31m✗ Error during shutdown: {e}\033[0m")
 
@@ -130,13 +118,16 @@ async def main():
     intents = disnake.Intents.all()
     bot = HER(intents=intents)
 
+    # Configure logger right after bot creation
+    logger.configure(bot, config, logging_level=1)
+
     try:
         bot.load_all_cogs()
         await bot.start(TOKEN)
+    except disnake.LoginFailure:
+        print("\033[31m✗ Invalid TOKEN. Check your .env file.\033[0m")
     except KeyboardInterrupt:
-        print("\n\033[33m⚠ Received keyboard interrupt\033[0m")
-    except disnake.LoginError:
-        print("\033[31m✗ Login failed. Check your TOKEN.\033[0m")
+        print("\n\033[33m⚠ Keyboard interrupt detected\033[0m")
     except Exception as e:
         print(f"\033[31m✗ Bot crashed: {e}\033[0m")
         import traceback

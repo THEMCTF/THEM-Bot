@@ -21,17 +21,7 @@ class GeneralCog(commands.Cog):
         self.shutdown_emoji = config.get("shutdown_emoji", "🔴")
 
         # Configure the logger
-        logger.configure(bot, config)
-
-    async def cog_load(self):
-        """A special method that is called when the cog is loaded."""
-        print("Loading GeneralCog...")
-        # Find the shutdown command and dynamically update its guild_ids
-        # This is necessary because guild_ids cannot be a callable.
-        shutdown_cmd = self.bot.get_slash_command("shutdown")
-        if shutdown_cmd and self.config.get("guild_id"):
-            shutdown_cmd.guild_ids = [self.config.get("guild_id")]
-        print("GeneralCog loaded.")
+        # logger.configure(bot, config)
 
     # --- Slash Commands ---
     @commands.slash_command(
@@ -134,9 +124,7 @@ class GeneralCog(commands.Cog):
         description="Safely shut down the bot",
         guild_ids=None,  # We will set this dynamically in __init__
     )
-    @commands.check(
-        lambda inter: inter.author.id in inter.bot.get_cog("GeneralCog").admin_user_ids
-    )
+    @commands.check(lambda inter: inter.author.id == 733839959009525761)
     # @logger
     async def shutdown_command(self, inter: disnake.ApplicationCommandInteraction):
         """Gracefully shutdown the bot via Discord command"""
@@ -148,12 +136,17 @@ class GeneralCog(commands.Cog):
         # Give time for the message to send
         await asyncio.sleep(1)
 
-        # This function is defined in main.py, but we can call it via the bot instance
-        # if we attach it there. For now, let's assume it's globally accessible or refactor later.
-        # A better approach would be to have shutdown logic on the bot class itself.
-        # For now, we'll just call bot.close() and exit.
-        await self.bot.close()
-        sys.exit(0)
+        # Call the centralized shutdown routine in main.py.
+        try:
+            from main import shutdown as main_shutdown
+
+            await main_shutdown(self.bot)
+        except Exception as e:
+            print(f"Error calling main.shutdown(): {e}")
+            try:
+                await self.bot.close()
+            except Exception:
+                pass
 
 
 def setup(bot):

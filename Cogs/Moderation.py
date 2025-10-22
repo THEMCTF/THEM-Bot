@@ -24,7 +24,7 @@ class ModerationCog(commands.Cog):
         self.config = config
 
         # Configure the logger
-        logger.configure(bot, config)
+        # logger.configure(bot, config)
 
         # Load constants from config
         self.colors = self.config.get("colors", {})
